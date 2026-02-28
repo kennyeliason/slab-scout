@@ -1,0 +1,292 @@
+/* Slab Scout - eBay Overlay Styles */
+
+#slab-scout-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  z-index: 999999;
+  transition: box-shadow 0.3s;
+}
+
+#slab-scout-panel:hover {
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Header */
+.ss-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #16213e, #0f3460);
+  border-radius: 16px 16px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.ss-logo {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e94560;
+  letter-spacing: 0.5px;
+}
+
+.ss-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.ss-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.ss-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* Body */
+.ss-body {
+  padding: 16px;
+}
+
+/* Card Info */
+.ss-card-info {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ss-parsed-title {
+  font-size: 13px;
+  color: #aaa;
+  line-height: 1.4;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ss-raw-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e94560;
+}
+
+/* Loading */
+.ss-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+  color: #888;
+}
+
+.ss-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #e94560;
+  border-radius: 50%;
+  animation: ss-spin 0.8s linear infinite;
+}
+
+@keyframes ss-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.ss-error {
+  color: #e94560;
+  padding: 12px;
+  background: rgba(233, 69, 96, 0.1);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+/* Best opportunity summary */
+.ss-best {
+  text-align: center;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 12px;
+}
+
+.ss-best-negative {
+  background: linear-gradient(135deg, rgba(233, 69, 96, 0.15), rgba(233, 69, 96, 0.05));
+  border-color: rgba(233, 69, 96, 0.3);
+}
+
+.ss-best-neutral {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.ss-best-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #888;
+  margin-bottom: 8px;
+}
+
+.ss-best-grade {
+  font-size: 28px;
+  font-weight: 800;
+  color: #10b981;
+  margin-bottom: 4px;
+}
+
+.ss-best-profit {
+  font-size: 22px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.ss-best-negative .ss-best-profit {
+  color: #e94560;
+  font-size: 14px;
+}
+
+.ss-best-roi {
+  font-size: 14px;
+  color: #6ee7b7;
+  margin-top: 4px;
+}
+
+/* Grade Table */
+.ss-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ss-table thead th {
+  text-align: left;
+  padding: 8px 6px;
+  color: #888;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ss-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.2s;
+}
+
+.ss-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ss-best-row {
+  background: rgba(16, 185, 129, 0.08) !important;
+}
+
+.ss-table td {
+  padding: 10px 6px;
+}
+
+.ss-grade-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.ss-grade-gem {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.ss-grade-high {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+.ss-grade-mid {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fcd34d;
+}
+
+.ss-grade-low {
+  background: rgba(233, 69, 96, 0.2);
+  color: #fca5a5;
+}
+
+.ss-range {
+  color: #888;
+  font-size: 12px;
+}
+
+.ss-profit-positive {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.ss-profit-negative {
+  color: #e94560;
+  font-weight: 600;
+}
+
+/* Fee note */
+.ss-fee-info {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* Not raw / no config */
+.ss-not-raw, .ss-no-config {
+  text-align: center;
+  padding: 20px;
+  color: #888;
+}
+
+.ss-not-raw p, .ss-no-config p {
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+/* Scrollbar */
+#slab-scout-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+#slab-scout-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#slab-scout-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}

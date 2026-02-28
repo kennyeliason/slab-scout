@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      width: 360px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+    }
+
+    .header {
+      padding: 20px;
+      text-align: center;
+      background: linear-gradient(135deg, #16213e, #0f3460);
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 800;
+      color: #e94560;
+      margin-bottom: 4px;
+    }
+
+    .tagline {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #888;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 4px;
+    }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      border-color: #e94560;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #e94560, #c62a47);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .status {
+      text-align: center;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .status.success {
+      display: block;
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+    }
+
+    .status.error {
+      display: block;
+      background: rgba(233, 69, 96, 0.15);
+      color: #e94560;
+    }
+
+    .help {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 12px;
+      color: #666;
+      line-height: 1.6;
+    }
+
+    .help a {
+      color: #e94560;
+      text-decoration: none;
+    }
+
+    .help a:hover {
+      text-decoration: underline;
+    }
+
+    .stats {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .stat {
+      flex: 1;
+      text-align: center;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #e94560;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🔍 Slab Scout</div>
+    <div class="tagline">Know the grading gap before you buy</div>
+  </div>
+  
+  <div class="content">
+    <div class="section">
+      <div class="section-title">eBay API Credentials</div>
+      <div class="input-group">
+        <label>Client ID (App ID)</label>
+        <input type="text" id="clientId" placeholder="Enter your eBay Client ID">
+      </div>
+      <div class="input-group">
+        <label>Client Secret (Cert ID)</label>
+        <input type="password" id="clientSecret" placeholder="Enter your eBay Client Secret">
+      </div>
+      <button class="btn" id="saveBtn">Save Credentials</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">How it works</div>
+      <div class="help">
+        <p>1. Browse any <strong>raw card</strong> listing on eBay</p>
+        <p>2. Slab Scout automatically shows graded comps</p>
+        <p>3. See the profit potential for each PSA grade</p>
+        <br>
+        <p>Need an eBay API key? <a href="https://developer.ebay.com/my/keys" target="_blank">Get one here →</a></p>
+        <p>Create a Production app and copy your credentials above.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
