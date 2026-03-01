@@ -71,16 +71,20 @@ async function searchSoldItems(token, query, grade, cardInfo, tier) {
   });
 
   try {
-    const response = await fetch(
-      `https://svcs.ebay.com/services/search/FindingService/v1?${params}`
-    );
+    const url = `https://svcs.ebay.com/services/search/FindingService/v1?${params}`;
+    console.log(`[Slab Scout] Finding API query: ${query}`);
+    console.log(`[Slab Scout] Finding API URL: ${url}`);
+    
+    const response = await fetch(url);
 
     if (!response.ok) {
-      console.warn(`Finding API returned ${response.status}`);
+      const errText = await response.text();
+      console.warn(`[Slab Scout] Finding API returned ${response.status}:`, errText.slice(0, 500));
       return [];
     }
 
     const data = await response.json();
+    console.log(`[Slab Scout] Finding API response:`, JSON.stringify(data).slice(0, 1000));
     const items = data.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
     
     return items
@@ -179,14 +183,15 @@ async function searchGradedComps(cardInfo) {
     // Try each query tier until we get results
     for (let tier = 0; tier < queries.length; tier++) {
       try {
-        // Try Marketplace Insights API first (SOLD items)
+        // Try Finding API first (SOLD items)
         let items = await searchSoldItems(token, queries[tier], grade, cardInfo, tier);
+        console.log(`[Slab Scout] PSA ${grade} tier ${tier}: ${items.length} sold items found`);
         
         // Fallback to Browse API (active listings) if no sold data
         if (items.length === 0) {
           items = await searchActiveItems(token, queries[tier], grade, cardInfo, tier);
-          // Mark these as active, not sold
           items.forEach(i => i.isActive = true);
+          console.log(`[Slab Scout] PSA ${grade} tier ${tier}: ${items.length} active items (fallback)`);
         }
         
         if (items.length >= 2 || (tier === queries.length - 1 && items.length > 0)) {
