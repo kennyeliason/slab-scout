@@ -277,6 +277,22 @@
   font-size: 13px;
 }
 
+/* No data rows */
+.ss-no-data-row {
+  opacity: 0.5;
+}
+
+.ss-no-data {
+  font-style: italic;
+  color: #888;
+  text-align: center;
+}
+
+.ss-comp-count {
+  font-size: 10px;
+  color: #888;
+}
+
 /* Scrollbar */
 #slab-scout-panel::-webkit-scrollbar {
   width: 6px;

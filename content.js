@@ -185,14 +185,24 @@
         const profitStr = p.profit > 0 
           ? `+$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}` 
           : `-$${Math.abs(p.profit).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+        const compCount = comps[grade].count;
+        const lowConfidence = compCount <= 1;
         
         tableHTML += `
           <tr class="${grade == bestGrade ? 'ss-best-row' : ''}">
             <td><span class="ss-grade-badge ss-grade-${grade >= 9 ? 'gem' : grade >= 7 ? 'high' : grade >= 5 ? 'mid' : 'low'}">PSA ${grade}</span></td>
-            <td>$${p.gradedAvg.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
-            <td class="ss-range">${p.gradedRange}</td>
+            <td>$${p.gradedAvg.toLocaleString(undefined, {maximumFractionDigits: 0})}${lowConfidence ? ' ⚠️' : ''}</td>
+            <td class="ss-range">${p.gradedRange} <span class="ss-comp-count">(${compCount})</span></td>
             <td class="${profitClass}">${profitStr}</td>
             <td>${p.verdict}</td>
+          </tr>
+        `;
+      } else {
+        tableHTML += `
+          <tr class="ss-no-data-row">
+            <td><span class="ss-grade-badge ss-grade-${grade >= 9 ? 'gem' : grade >= 7 ? 'high' : grade >= 5 ? 'mid' : 'low'}">PSA ${grade}</span></td>
+            <td colspan="3" class="ss-no-data">No recent sold comps</td>
+            <td>—</td>
           </tr>
         `;
       }
@@ -201,10 +211,14 @@
     tableHTML += '</tbody></table>';
     tableEl.innerHTML = tableHTML;
     
+    const hasNoData = grades.some(g => !comps[g]);
+    const hasLowConf = Object.values(comps).some(c => c.count <= 1);
     feeEl.innerHTML = `
       <div class="ss-fee-info">
         💰 Profit calculated with $${gradingFee || 150} grading fee
-        <br>📊 Based on last ${Object.values(comps)[0]?.count || 5} sold comps per grade
+        <br>📊 Comp count shown in parentheses per grade
+        ${hasLowConf ? '<br>⚠️ Low comp count — data may not be reliable' : ''}
+        ${hasNoData ? '<br>🔍 "No recent sold comps" = no eBay sales found (rare/high-end cards may sell at auction houses)' : ''}
         <br>⚙️ Change fee in Slab Scout settings
       </div>
     `;
