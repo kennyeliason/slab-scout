@@ -522,21 +522,38 @@
   font-size: 14px;
 }
 
-.ss-ai-profit-positive {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+/* AI profit mini-table */
+.ss-ai-profit-table {
+  padding: 8px 12px;
 }
 
-.ss-ai-profit-negative {
-  background: rgba(233, 69, 96, 0.1);
-  color: #e94560;
+.ss-ai-mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
 }
 
-.ss-ai-worst {
-  text-align: center;
-  font-size: 11px;
+.ss-ai-mini-table th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: #888;
-  padding: 4px 14px 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ss-ai-mini-table td {
+  padding: 5px 8px;
+}
+
+.ss-ai-mini-likely {
+  background: rgba(124, 58, 237, 0.15) !important;
+  font-weight: 600;
+}
+
+.ss-ai-mini-likely td:first-child {
+  color: #a78bfa;
 }
 
 .ss-ai-breakdown {

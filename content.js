@@ -488,39 +488,41 @@
       return `<span style="color:${color};font-weight:600;">${score}</span>`;
     }
     
-    // Calculate profit at the AI-estimated likely grade
+    // Build mini profit table for the AI grade range
     const likelyGrade = g.grade_likely;
-    let profitAtGrade = '';
-    if (profit[likelyGrade]) {
-      const p = profit[likelyGrade];
-      if (p.profit > 0) {
-        profitAtGrade = `<div class="ss-ai-profit ss-ai-profit-positive">At PSA ${likelyGrade}: <strong>+$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> profit (${p.roi.toFixed(0)}% ROI)</div>`;
-      } else {
-        profitAtGrade = `<div class="ss-ai-profit ss-ai-profit-negative">At PSA ${likelyGrade}: <strong>-$${Math.abs(p.profit).toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> loss</div>`;
-      }
-    }
+    let profitTable = '<div class="ss-ai-profit-table"><table class="ss-ai-mini-table"><thead><tr><th>Grade</th><th>Avg Sold</th><th>Profit</th><th>ROI</th></tr></thead><tbody>';
     
-    // Worst case (low estimate)
-    let worstCase = '';
-    if (profit[g.grade_low] && g.grade_low !== likelyGrade) {
-      const p = profit[g.grade_low];
-      if (p.profit > 0) {
-        worstCase = `<div class="ss-ai-worst">Even at PSA ${g.grade_low} (worst case): +$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>`;
-      } else {
-        worstCase = `<div class="ss-ai-worst">⚠️ At PSA ${g.grade_low} (worst case): -$${Math.abs(p.profit).toLocaleString(undefined, {maximumFractionDigits: 0})}</div>`;
+    for (let gr = g.grade_high; gr >= g.grade_low; gr--) {
+      if (!profit[gr]) {
+        profitTable += `<tr class="ss-ai-mini-nodata ${gr === likelyGrade ? 'ss-ai-mini-likely' : ''}"><td>PSA ${gr}${gr === likelyGrade ? ' ★' : ''}</td><td colspan="3" style="color:#666;font-style:italic;">No comps</td></tr>`;
+        continue;
       }
+      const p = profit[gr];
+      const profitClass = p.profit > 0 ? 'ss-profit-positive' : 'ss-profit-negative';
+      const profitStr = p.profit > 0 
+        ? `+$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}` 
+        : `-$${Math.abs(p.profit).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+      const isLikely = gr === likelyGrade;
+      
+      profitTable += `
+        <tr class="${isLikely ? 'ss-ai-mini-likely' : ''}">
+          <td>PSA ${gr}${isLikely ? ' ★' : ''}</td>
+          <td>$${p.gradedAvg.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+          <td class="${profitClass}">${profitStr}</td>
+          <td class="${profitClass}">${p.roi.toFixed(0)}%</td>
+        </tr>`;
     }
+    profitTable += '</tbody></table></div>';
 
     aiResult.innerHTML = `
       <div class="ss-ai-header">
         <div class="ss-ai-grade-display">
           <div class="ss-ai-grade-range">${gradeRange}</div>
-          <div class="ss-ai-likely">Most likely: <strong>PSA ${likelyGrade}</strong></div>
+          <div class="ss-ai-likely">Most likely: <strong>PSA ${likelyGrade}</strong> ★</div>
           <div class="ss-ai-confidence" style="color:${confColor}">Confidence: ${g.confidence}</div>
         </div>
       </div>
-      ${profitAtGrade}
-      ${worstCase}
+      ${profitTable}
       <div class="ss-ai-breakdown">
         <div class="ss-ai-criteria">
           <div class="ss-ai-row">📐 Centering: ${scoreBadge(g.centering?.score)} <span class="ss-ai-detail">${g.centering?.detail || ''}</span></div>
