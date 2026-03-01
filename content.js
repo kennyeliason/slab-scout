@@ -120,7 +120,7 @@
   }
 
   // Show grade comparison table
-  function renderResults(panel, cardInfo, rawPrice, comps, profit) {
+  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee) {
     const resultsEl = panel.querySelector('.ss-results');
     const summaryEl = panel.querySelector('.ss-summary');
     const tableEl = panel.querySelector('.ss-grade-table');
@@ -203,8 +203,9 @@
     
     feeEl.innerHTML = `
       <div class="ss-fee-info">
-        💰 Profit calculated with $150 PSA regular grading fee
+        💰 Profit calculated with $${gradingFee || 150} grading fee
         <br>📊 Based on last ${Object.values(comps)[0]?.count || 5} sold comps per grade
+        <br>⚙️ Change fee in Slab Scout settings
       </div>
     `;
 
@@ -263,7 +264,7 @@
     panel.querySelector('.ss-loading').style.display = 'none';
 
     if (response.success) {
-      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit);
+      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee);
     } else {
       panel.querySelector('.ss-error').textContent = response.error;
       panel.querySelector('.ss-error').style.display = 'block';

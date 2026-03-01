@@ -203,9 +203,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'FETCH_COMPS') {
     (async () => {
       try {
+        const config = await chrome.storage.sync.get(['gradingFee']);
+        const fee = config.gradingFee || GRADING_FEES.regular;
         const comps = await searchGradedComps(message.cardInfo);
-        const profit = calculateProfit(message.rawPrice, comps);
-        sendResponse({ success: true, comps, profit, gradingFees: GRADING_FEES });
+        const profit = calculateProfit(message.rawPrice, comps, fee);
+        sendResponse({ success: true, comps, profit, gradingFee: fee });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
       }
