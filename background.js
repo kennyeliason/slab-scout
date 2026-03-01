@@ -57,127 +57,157 @@ async function searchGradedComps(cardInfo) {
   const grades = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   
   for (const grade of grades) {
-    const query = buildGradedQuery(cardInfo, grade);
+    const queries = buildGradedQueries(cardInfo, grade);
+    let foundItems = null;
+    let usedTier = 0;
     
-    try {
-      const params = new URLSearchParams({
-        q: query,
-        filter: [
-          'buyingOptions:{FIXED_PRICE|AUCTION}',
-          'conditionIds:{2750}',
-          'priceCurrency:USD'
-        ].join(','),
-        sort: '-endDate',
-        limit: '15' // Fetch more so we can filter aggressively
-      });
+    // Try each query tier until we get results
+    for (let tier = 0; tier < queries.length; tier++) {
+      try {
+        const params = new URLSearchParams({
+          q: queries[tier],
+          filter: [
+            'buyingOptions:{FIXED_PRICE|AUCTION}',
+            'priceCurrency:USD'
+          ].join(','),
+          sort: '-endDate',
+          limit: '15'
+        });
 
-      const response = await fetch(
-        `${EBAY_API_BASE}/buy/browse/v1/item_summary/search?${params}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
-            'X-EBAY-C-ENDUSERCTX': 'affiliateCampaignId=<ChangeMe>'
+        const response = await fetch(
+          `${EBAY_API_BASE}/buy/browse/v1/item_summary/search?${params}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+              'X-EBAY-C-ENDUSERCTX': 'affiliateCampaignId=<ChangeMe>'
+            }
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const items = (data.itemSummaries || [])
+            .filter(item => {
+              const title = item.title.toUpperCase();
+              if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
+              // At tier 0-1, require last name match
+              if (tier <= 1 && cardInfo.playerName) {
+                const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
+                const lastName = nameParts[nameParts.length - 1];
+                if (!title.includes(lastName)) return false;
+              }
+              if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
+              return true;
+            })
+            .map(item => ({
+              title: item.title,
+              price: parseFloat(item.price?.value || 0),
+              currency: item.price?.currency || 'USD',
+              date: item.itemEndDate || item.itemCreationDate,
+              url: item.itemWebUrl,
+              image: item.thumbnailImages?.[0]?.imageUrl
+            }))
+            .filter(item => item.price > 0);
+          
+          if (items.length >= 2 || (tier === queries.length - 1 && items.length > 0)) {
+            foundItems = items;
+            usedTier = tier;
+            break;
           }
         }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const items = (data.itemSummaries || [])
-          .filter(item => {
-            const title = item.title.toUpperCase();
-            // Must contain the PSA grade
-            if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
-            // Must contain player name (if we have one)
-            if (cardInfo.playerName) {
-              const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
-              // Require last name at minimum
-              const lastName = nameParts[nameParts.length - 1];
-              if (!title.includes(lastName)) return false;
-            }
-            // Must match year if we have one
-            if (cardInfo.year && !title.includes(cardInfo.year)) return false;
-            // Must match card number if we have one (strong signal)
-            if (cardInfo.cardNumber) {
-              const hasNum = title.includes(`#${cardInfo.cardNumber}`) || 
-                             title.includes(`# ${cardInfo.cardNumber}`) ||
-                             title.includes(`NO. ${cardInfo.cardNumber}`) ||
-                             title.includes(`NO.${cardInfo.cardNumber}`);
-              // Card number is a very strong signal — prefer matches but don't require
-              // (some listings omit it)
-            }
-            // Filter out lots, bundles, reprints
-            if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
-            return true;
-          })
-          .map(item => ({
-            title: item.title,
-            price: parseFloat(item.price?.value || 0),
-            currency: item.price?.currency || 'USD',
-            date: item.itemEndDate || item.itemCreationDate,
-            url: item.itemWebUrl,
-            image: item.thumbnailImages?.[0]?.imageUrl
-          }))
-          .filter(item => item.price > 0);
-        
-        if (items.length > 0) {
-          // Remove outliers: drop prices below 25th percentile * 0.3 and above 75th * 3
-          // This kills the junk comps that drag averages down
-          const sorted = [...items].sort((a, b) => a.price - b.price);
-          const q1 = sorted[Math.floor(sorted.length * 0.25)]?.price || sorted[0].price;
-          const q3 = sorted[Math.floor(sorted.length * 0.75)]?.price || sorted[sorted.length - 1].price;
-          const iqr = q3 - q1;
-          const lowerBound = q1 - (iqr * 1.5);
-          const upperBound = q3 + (iqr * 1.5);
-          
-          const filtered = items.filter(i => {
-            // For small sets (<=3), keep all — not enough data to outlier-detect
-            if (items.length <= 3) return true;
-            return i.price >= Math.max(lowerBound, 1) && i.price <= upperBound;
-          }).slice(0, 5);
-          
-          if (filtered.length > 0) {
-            const prices = filtered.map(i => i.price);
-            // Use median instead of mean — more resistant to remaining outliers
-            const sortedPrices = [...prices].sort((a, b) => a - b);
-            const median = sortedPrices.length % 2 === 0
-              ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
-              : sortedPrices[Math.floor(sortedPrices.length/2)];
-            
-            results[grade] = {
-              items: filtered,
-              low: Math.min(...prices),
-              high: Math.max(...prices),
-              avg: median, // Using median, not mean
-              count: filtered.length
-            };
-          }
-        }
+      } catch (e) {
+        console.error(`Error fetching PSA ${grade} (tier ${tier}):`, e);
       }
-    } catch (e) {
-      console.error(`Error fetching PSA ${grade} comps:`, e);
+    }
+    
+    if (foundItems && foundItems.length > 0) {
+      // Remove outliers using IQR method
+      const sorted = [...foundItems].sort((a, b) => a.price - b.price);
+      const q1 = sorted[Math.floor(sorted.length * 0.25)]?.price || sorted[0].price;
+      const q3 = sorted[Math.floor(sorted.length * 0.75)]?.price || sorted[sorted.length - 1].price;
+      const iqr = q3 - q1;
+      const lowerBound = q1 - (iqr * 1.5);
+      const upperBound = q3 + (iqr * 1.5);
+      
+      const filtered = foundItems.filter(i => {
+        if (foundItems.length <= 3) return true;
+        return i.price >= Math.max(lowerBound, 1) && i.price <= upperBound;
+      }).slice(0, 5);
+      
+      if (filtered.length > 0) {
+        const prices = filtered.map(i => i.price);
+        const sortedPrices = [...prices].sort((a, b) => a - b);
+        const median = sortedPrices.length % 2 === 0
+          ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
+          : sortedPrices[Math.floor(sortedPrices.length/2)];
+        
+        results[grade] = {
+          items: filtered,
+          low: Math.min(...prices),
+          high: Math.max(...prices),
+          avg: median,
+          count: filtered.length,
+          searchTier: usedTier // track how broad we had to go
+        };
+      }
     }
   }
 
   return results;
 }
 
-// Build search query for a specific grade
-function buildGradedQuery(cardInfo, grade) {
-  const parts = [];
-  if (cardInfo.playerName) parts.push(`"${cardInfo.playerName}"`); // Exact phrase match
-  if (cardInfo.year) parts.push(cardInfo.year);
-  if (cardInfo.setName) parts.push(cardInfo.setName);
-  if (cardInfo.cardNumber) parts.push(`#${cardInfo.cardNumber}`);
-  // Include key variants that significantly affect price
-  if (cardInfo.variants) {
-    const priceVariants = cardInfo.variants.filter(v => 
-      /^(Refractor|Auto|Autograph|Patch|Rookie|RC|1st Bowman|\/\d+)$/i.test(v)
-    );
-    priceVariants.forEach(v => parts.push(v));
+// Build search queries with fallback tiers (tight → loose)
+function buildGradedQueries(cardInfo, grade) {
+  const queries = [];
+  
+  // Tier 1: Full specificity — name + year + set + card# + variants
+  {
+    const parts = [];
+    if (cardInfo.playerName) parts.push(`"${cardInfo.playerName}"`);
+    if (cardInfo.year) parts.push(cardInfo.year);
+    if (cardInfo.setName) parts.push(cardInfo.setName);
+    if (cardInfo.cardNumber) parts.push(`#${cardInfo.cardNumber}`);
+    if (cardInfo.variants) {
+      const priceVariants = cardInfo.variants.filter(v => 
+        /^(Refractor|Auto|Autograph|Patch|Rookie|RC|1st Bowman|\/\d+)$/i.test(v)
+      );
+      priceVariants.forEach(v => parts.push(v));
+    }
+    parts.push(`PSA ${grade}`);
+    queries.push(parts.join(' '));
   }
-  parts.push(`PSA ${grade}`);
-  return parts.join(' ');
+  
+  // Tier 2: Name + year + set (no card#, no variants)
+  {
+    const parts = [];
+    if (cardInfo.playerName) parts.push(`"${cardInfo.playerName}"`);
+    if (cardInfo.year) parts.push(cardInfo.year);
+    if (cardInfo.setName) parts.push(cardInfo.setName);
+    parts.push(`PSA ${grade}`);
+    const q = parts.join(' ');
+    if (q !== queries[0]) queries.push(q);
+  }
+  
+  // Tier 3: Name + year only (no quotes on name)
+  {
+    const parts = [];
+    if (cardInfo.playerName) parts.push(cardInfo.playerName);
+    if (cardInfo.year) parts.push(cardInfo.year);
+    parts.push(`PSA ${grade}`);
+    const q = parts.join(' ');
+    if (!queries.includes(q)) queries.push(q);
+  }
+  
+  // Tier 4: Just name + PSA grade (broadest)
+  {
+    const parts = [];
+    if (cardInfo.playerName) parts.push(cardInfo.playerName);
+    parts.push(`PSA ${grade}`);
+    const q = parts.join(' ');
+    if (!queries.includes(q)) queries.push(q);
+  }
+  
+  return queries;
 }
 
 // Parse card info from an eBay listing title
