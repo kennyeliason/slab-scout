@@ -329,6 +329,44 @@ function calculateProfit(rawPrice, gradedComps, gradingFee = GRADING_FEES.regula
   return scenarios;
 }
 
+// AI Title Parsing
+async function aiParseTitle(title, apiKey) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      max_tokens: 200,
+      temperature: 0,
+      messages: [{
+        role: 'system',
+        content: `Extract card details from an eBay listing title. Return JSON only:
+{
+  "playerName": "First Last" (or "First Last Jr." etc),
+  "year": "YYYY" or null,
+  "setName": "Brand Set" (e.g. "Topps Chrome", "Panini Prizm", "Star Co") or null,
+  "cardNumber": "number" or null,
+  "variants": ["Rookie", "RC", "Refractor", "Auto", "/99", etc] or []
+}
+Be precise. "1986 Star" set = "Star Co". Include parallel/insert names in variants. Card number without #.`
+      }, {
+        role: 'user',
+        content: title
+      }]
+    })
+  });
+
+  if (!response.ok) throw new Error(`OpenAI: ${response.status}`);
+  const data = await response.json();
+  const content = data.choices[0]?.message?.content || '';
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON in AI response');
+  return JSON.parse(jsonMatch[0]);
+}
+
 // AI Card Grading via OpenAI Vision
 async function aiGradeCard(imageUrls, cardInfo) {
   const config = await chrome.storage.sync.get(['openaiApiKey']);
@@ -425,9 +463,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   
   if (message.type === 'PARSE_TITLE') {
-    const cardInfo = parseCardTitle(message.title);
-    sendResponse({ success: true, cardInfo });
-    return false;
+    (async () => {
+      // Try AI parsing first, fall back to regex
+      const config = await chrome.storage.sync.get(['openaiApiKey']);
+      if (config.openaiApiKey) {
+        try {
+          const aiParsed = await aiParseTitle(message.title, config.openaiApiKey);
+          sendResponse({ success: true, cardInfo: { ...aiParsed, raw: message.title } });
+          return;
+        } catch (e) {
+          console.warn('AI parse failed, falling back to regex:', e);
+        }
+      }
+      const cardInfo = parseCardTitle(message.title);
+      sendResponse({ success: true, cardInfo });
+    })();
+    return true;
   }
 
   if (message.type === 'AI_GRADE') {
