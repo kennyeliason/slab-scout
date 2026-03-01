@@ -30,7 +30,7 @@ async function getEbayToken() {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Authorization': `Basic ${credentials}`
     },
-    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope'
+    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope+https://api.ebay.com/oauth/api_scope/buy.marketplace.insights'
   });
 
   if (!response.ok) {
@@ -49,6 +49,108 @@ async function getEbayToken() {
   return data.access_token;
 }
 
+// Search sold items via Marketplace Insights API
+async function searchSoldItems(token, query, grade, cardInfo, tier) {
+  const params = new URLSearchParams({
+    q: query,
+    filter: 'priceCurrency:USD',
+    sort: '-endDate',
+    limit: '15'
+  });
+
+  try {
+    const response = await fetch(
+      `${EBAY_API_BASE}/buy/marketplace_insights/v1_beta/item_sales/search?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`Marketplace Insights API returned ${response.status}, falling back to Browse API`);
+      return [];
+    }
+
+    const data = await response.json();
+    return (data.itemSales || [])
+      .filter(item => {
+        const title = (item.title || '').toUpperCase();
+        if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
+        if (tier <= 1 && cardInfo.playerName) {
+          const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
+          const lastName = nameParts[nameParts.length - 1];
+          if (!title.includes(lastName)) return false;
+        }
+        if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
+        return true;
+      })
+      .map(item => ({
+        title: item.title,
+        price: parseFloat(item.lastSoldPrice?.value || item.price?.value || 0),
+        currency: item.lastSoldPrice?.currency || 'USD',
+        date: item.lastSoldDate || item.itemEndDate,
+        url: item.itemWebUrl || item.itemAffiliateWebUrl,
+        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl,
+        isSold: true
+      }))
+      .filter(item => item.price > 0);
+  } catch (e) {
+    console.warn('Marketplace Insights error:', e);
+    return [];
+  }
+}
+
+// Search active listings via Browse API (fallback)
+async function searchActiveItems(token, query, grade, cardInfo, tier) {
+  const params = new URLSearchParams({
+    q: query,
+    filter: [
+      'buyingOptions:{FIXED_PRICE|AUCTION}',
+      'priceCurrency:USD'
+    ].join(','),
+    sort: '-endDate',
+    limit: '15'
+  });
+
+  const response = await fetch(
+    `${EBAY_API_BASE}/buy/browse/v1/item_summary/search?${params}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'X-EBAY-C-ENDUSERCTX': 'affiliateCampaignId=<ChangeMe>'
+      }
+    }
+  );
+
+  if (!response.ok) return [];
+
+  const data = await response.json();
+  return (data.itemSummaries || [])
+    .filter(item => {
+      const title = item.title.toUpperCase();
+      if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
+      if (tier <= 1 && cardInfo.playerName) {
+        const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
+        const lastName = nameParts[nameParts.length - 1];
+        if (!title.includes(lastName)) return false;
+      }
+      if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
+      return true;
+    })
+    .map(item => ({
+      title: item.title,
+      price: parseFloat(item.price?.value || 0),
+      currency: item.price?.currency || 'USD',
+      date: item.itemEndDate || item.itemCreationDate,
+      url: item.itemWebUrl,
+      image: item.thumbnailImages?.[0]?.imageUrl,
+      isSold: false
+    }))
+    .filter(item => item.price > 0);
+}
+
 // Search eBay sold/completed listings for graded versions
 async function searchGradedComps(cardInfo) {
   const token = await getEbayToken();
@@ -64,56 +166,20 @@ async function searchGradedComps(cardInfo) {
     // Try each query tier until we get results
     for (let tier = 0; tier < queries.length; tier++) {
       try {
-        const params = new URLSearchParams({
-          q: queries[tier],
-          filter: [
-            'buyingOptions:{FIXED_PRICE|AUCTION}',
-            'priceCurrency:USD'
-          ].join(','),
-          sort: '-endDate',
-          limit: '15'
-        });
-
-        const response = await fetch(
-          `${EBAY_API_BASE}/buy/browse/v1/item_summary/search?${params}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
-              'X-EBAY-C-ENDUSERCTX': 'affiliateCampaignId=<ChangeMe>'
-            }
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          const items = (data.itemSummaries || [])
-            .filter(item => {
-              const title = item.title.toUpperCase();
-              if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
-              // At tier 0-1, require last name match
-              if (tier <= 1 && cardInfo.playerName) {
-                const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
-                const lastName = nameParts[nameParts.length - 1];
-                if (!title.includes(lastName)) return false;
-              }
-              if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
-              return true;
-            })
-            .map(item => ({
-              title: item.title,
-              price: parseFloat(item.price?.value || 0),
-              currency: item.price?.currency || 'USD',
-              date: item.itemEndDate || item.itemCreationDate,
-              url: item.itemWebUrl,
-              image: item.thumbnailImages?.[0]?.imageUrl
-            }))
-            .filter(item => item.price > 0);
-          
-          if (items.length >= 2 || (tier === queries.length - 1 && items.length > 0)) {
-            foundItems = items;
-            usedTier = tier;
-            break;
-          }
+        // Try Marketplace Insights API first (SOLD items)
+        let items = await searchSoldItems(token, queries[tier], grade, cardInfo, tier);
+        
+        // Fallback to Browse API (active listings) if no sold data
+        if (items.length === 0) {
+          items = await searchActiveItems(token, queries[tier], grade, cardInfo, tier);
+          // Mark these as active, not sold
+          items.forEach(i => i.isActive = true);
+        }
+        
+        if (items.length >= 2 || (tier === queries.length - 1 && items.length > 0)) {
+          foundItems = items;
+          usedTier = tier;
+          break;
         }
       } catch (e) {
         console.error(`Error fetching PSA ${grade} (tier ${tier}):`, e);
@@ -141,13 +207,15 @@ async function searchGradedComps(cardInfo) {
           ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
           : sortedPrices[Math.floor(sortedPrices.length/2)];
         
+        const hasActiveFallback = filtered.some(i => i.isActive);
         results[grade] = {
           items: filtered,
           low: Math.min(...prices),
           high: Math.max(...prices),
           avg: median,
           count: filtered.length,
-          searchTier: usedTier // track how broad we had to go
+          searchTier: usedTier,
+          dataSource: hasActiveFallback ? 'active' : 'sold'
         };
       }
     }

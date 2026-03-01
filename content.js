@@ -275,11 +275,12 @@
               <div class="ss-comp-list">
                 ${comps[grade].items.map(item => {
                   const date = item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                  const soldBadge = item.isSold ? '<span class="ss-sold-badge">SOLD</span>' : '<span class="ss-active-badge">ACTIVE</span>';
                   return `
                     <a href="${item.url}" target="_blank" class="ss-comp-item" title="${item.title}">
                       ${item.image ? `<img src="${item.image}" class="ss-comp-thumb" alt="">` : ''}
                       <div class="ss-comp-info">
-                        <div class="ss-comp-price">$${item.price.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                        <div class="ss-comp-price">$${item.price.toLocaleString(undefined, {maximumFractionDigits: 0})} ${soldBadge}</div>
                         <div class="ss-comp-date">${date}</div>
                       </div>
                       <div class="ss-comp-link">↗</div>
