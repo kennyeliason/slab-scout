@@ -482,6 +482,51 @@
         if (gradeNum === likelyGrade) row.classList.add('ss-ai-likely-row');
       }
     });
+    
+    // REWRITE the summary box to reflect AI grade estimate
+    const summaryEl = panel.querySelector('.ss-summary');
+    const fee = gradingFee || 150;
+    const priceLabel = isAuction ? 'this bid' : 'this price';
+    
+    // Check profit at likely grade and worst case (grade_low)
+    const likelyProfit = profit[likelyGrade];
+    const worstProfit = profit[g.grade_low];
+    
+    if (likelyProfit && likelyProfit.profit > 0) {
+      const roiStr = likelyProfit.roi.toFixed(0);
+      const is2x = likelyProfit.roi >= 100;
+      const worstNote = worstProfit && g.grade_low !== likelyGrade
+        ? (worstProfit.profit > 0 
+          ? `<div class="ss-best-sub">Even at PSA ${g.grade_low} (worst case): +$${worstProfit.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>`
+          : `<div class="ss-best-sub">⚠️ At PSA ${g.grade_low}: -$${Math.abs(worstProfit.profit).toLocaleString(undefined, {maximumFractionDigits: 0})} loss</div>`)
+        : '';
+      
+      summaryEl.innerHTML = `
+        <div class="ss-best ${is2x ? 'ss-best-fire' : ''}">
+          <div class="ss-best-label">${is2x ? '🔥' : '✅'} AI estimates PSA ${likelyGrade} → at ${priceLabel}:</div>
+          <div class="ss-best-profit">+$${likelyProfit.profit.toLocaleString(undefined, {maximumFractionDigits: 0})} <span class="ss-roi-badge">${roiStr}% ROI</span></div>
+          ${worstNote}
+        </div>
+      `;
+    } else if (likelyProfit) {
+      // Likely grade is a loss
+      const maxPayable = comps[likelyGrade] ? Math.floor(comps[likelyGrade].avg - fee) : 0;
+      summaryEl.innerHTML = `
+        <div class="ss-best ss-best-negative">
+          <div class="ss-best-label">❌ AI estimates PSA ${likelyGrade} → not profitable at ${priceLabel}</div>
+          <div class="ss-best-profit">-$${Math.abs(likelyProfit.profit).toLocaleString(undefined, {maximumFractionDigits: 0})} loss after grading</div>
+          ${maxPayable > 0 ? `<div class="ss-best-sub">Would need to ${isAuction ? 'win at' : 'buy for'} ≤$${maxPayable.toLocaleString()} to break even</div>` : ''}
+        </div>
+      `;
+    } else {
+      // No comp data for likely grade
+      summaryEl.innerHTML = `
+        <div class="ss-best ss-best-neutral">
+          <div class="ss-best-label">🤖 AI estimates ${gradeRange}</div>
+          <div class="ss-best-profit">No sold comps at PSA ${likelyGrade} to calculate profit</div>
+        </div>
+      `;
+    }
   }
 
   // Run on page load
