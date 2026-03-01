@@ -21,6 +21,18 @@
     // Check if listing mentions grading terms (skip already-graded cards)
     const isGraded = /\b(PSA|BGS|SGC|CGC)\s*\d/i.test(title);
     
+    // Extract PSA grading fee from listing (eBay shows "Additional services available")
+    let listingGradingFee = null;
+    document.querySelectorAll('span, div, li').forEach(el => {
+      const text = el.textContent;
+      if (/PSA\s+Grading/i.test(text)) {
+        const feeMatch = text.match(/\$\s*([\d,.]+)/);
+        if (feeMatch) {
+          listingGradingFee = parseFloat(feeMatch[1].replace(/,/g, ''));
+        }
+      }
+    });
+    
     // Detect auction vs fixed price
     const isAuction = !!(
       document.querySelector('#bidBtn, .x-bid-action, [data-testid="x-bid-action"]') ||
@@ -32,7 +44,7 @@
     
     const bidCount = document.querySelector('.x-bid-count span, #vi-abf-cur-num')?.textContent?.trim();
     
-    return { title, price, isGraded, isAuction, bidCount };
+    return { title, price, isGraded, isAuction, bidCount, listingGradingFee };
   }
 
   // Create the scout panel
@@ -141,7 +153,7 @@
   }
 
   // Show grade comparison table
-  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee, isAuction) {
+  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee, isAuction, feeSource) {
     const resultsEl = panel.querySelector('.ss-results');
     const summaryEl = panel.querySelector('.ss-summary');
     const tableEl = panel.querySelector('.ss-grade-table');
@@ -268,13 +280,15 @@
     
     const hasNoData = grades.some(g => !comps[g]);
     const hasLowConf = Object.values(comps).some(c => c.count <= 1);
+    const feeLabel = feeSource === 'listing' 
+      ? `$${gradingFee || 150} grading fee (from listing)` 
+      : `$${gradingFee || 150} grading fee (from settings)`;
     feeEl.innerHTML = `
       <div class="ss-fee-info">
-        💰 Profit calculated with $${gradingFee || 150} grading fee
+        💰 ${feeLabel}
         <br>📊 Comp count shown in parentheses per grade
         ${hasLowConf ? '<br>⚠️ Low comp count — data may not be reliable' : ''}
         ${hasNoData ? '<br>🔍 "No recent sold comps" = no eBay sales found (rare/high-end cards may sell at auction houses)' : ''}
-        <br>⚙️ Change fee in Slab Scout settings
       </div>
     `;
 
@@ -327,17 +341,18 @@
     panel.querySelector('.ss-results').style.display = 'none';
     panel.querySelector('.ss-error').style.display = 'none';
 
-    // Fetch comps
+    // Fetch comps (use listing's grading fee if available)
     const response = await chrome.runtime.sendMessage({
       type: 'FETCH_COMPS',
       cardInfo: parsed.cardInfo,
-      rawPrice: listing.price
+      rawPrice: listing.price,
+      listingGradingFee: listing.listingGradingFee
     });
 
     panel.querySelector('.ss-loading').style.display = 'none';
 
     if (response.success) {
-      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction);
+      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction, response.feeSource);
       
       // Show AI Grade button if OpenAI is configured
       if (configCheck.hasOpenAI) {

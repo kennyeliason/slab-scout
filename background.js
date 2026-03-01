@@ -280,10 +280,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const config = await chrome.storage.sync.get(['gradingFee']);
-        const fee = config.gradingFee || GRADING_FEES.regular;
+        // Prefer listing's grading fee > user setting > default
+        const fee = message.listingGradingFee || config.gradingFee || GRADING_FEES.regular;
+        const feeSource = message.listingGradingFee ? 'listing' : 'settings';
         const comps = await searchGradedComps(message.cardInfo);
         const profit = calculateProfit(message.rawPrice, comps, fee);
-        sendResponse({ success: true, comps, profit, gradingFee: fee });
+        sendResponse({ success: true, comps, profit, gradingFee: fee, feeSource });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
       }
