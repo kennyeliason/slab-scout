@@ -30,7 +30,7 @@ async function getEbayToken() {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Authorization': `Basic ${credentials}`
     },
-    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope+https://api.ebay.com/oauth/api_scope/buy.marketplace.insights'
+    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope'
   });
 
   if (!response.ok) {
@@ -49,34 +49,43 @@ async function getEbayToken() {
   return data.access_token;
 }
 
-// Search sold items via Marketplace Insights API
+// Search sold items via Finding API (findCompletedItems)
 async function searchSoldItems(token, query, grade, cardInfo, tier) {
+  // Finding API uses the App ID (Client ID) directly, not OAuth
+  const config = await chrome.storage.sync.get(['ebayClientId']);
+  if (!config.ebayClientId) return [];
+  
   const params = new URLSearchParams({
-    q: query,
-    filter: 'priceCurrency:USD',
-    sort: '-endDate',
-    limit: '15'
+    'OPERATION-NAME': 'findCompletedItems',
+    'SERVICE-VERSION': '1.13.0',
+    'SECURITY-APPNAME': config.ebayClientId,
+    'RESPONSE-DATA-FORMAT': 'JSON',
+    'REST-PAYLOAD': '',
+    'keywords': query,
+    'itemFilter(0).name': 'SoldItemsOnly',
+    'itemFilter(0).value': 'true',
+    'itemFilter(1).name': 'Currency',
+    'itemFilter(1).value': 'USD',
+    'sortOrder': 'EndTimeSoonest',
+    'paginationInput.entriesPerPage': '15'
   });
 
   try {
     const response = await fetch(
-      `${EBAY_API_BASE}/buy/marketplace_insights/v1_beta/item_sales/search?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US'
-        }
-      }
+      `https://svcs.ebay.com/services/search/FindingService/v1?${params}`
     );
 
     if (!response.ok) {
-      console.warn(`Marketplace Insights API returned ${response.status}, falling back to Browse API`);
+      console.warn(`Finding API returned ${response.status}`);
       return [];
     }
 
     const data = await response.json();
-    return (data.itemSales || [])
+    const items = data.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
+    
+    return items
       .filter(item => {
-        const title = (item.title || '').toUpperCase();
+        const title = (item.title?.[0] || '').toUpperCase();
         if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
         if (tier <= 1 && cardInfo.playerName) {
           const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
@@ -84,20 +93,24 @@ async function searchSoldItems(token, query, grade, cardInfo, tier) {
           if (!title.includes(lastName)) return false;
         }
         if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
+        // Must be actually sold (not just ended unsold)
+        const sellingState = item.sellingStatus?.[0]?.sellingState?.[0];
+        if (sellingState !== 'EndedWithSales') return false;
         return true;
       })
       .map(item => ({
-        title: item.title,
-        price: parseFloat(item.lastSoldPrice?.value || item.price?.value || 0),
-        currency: item.lastSoldPrice?.currency || 'USD',
-        date: item.lastSoldDate || item.itemEndDate,
-        url: item.itemWebUrl || item.itemAffiliateWebUrl,
-        image: item.thumbnailImages?.[0]?.imageUrl || item.image?.imageUrl,
+        title: item.title?.[0] || '',
+        price: parseFloat(item.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.__value__ || 
+                          item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0),
+        currency: 'USD',
+        date: item.listingInfo?.[0]?.endTime?.[0],
+        url: item.viewItemURL?.[0],
+        image: item.galleryURL?.[0]?.replace('s-l140', 's-l300'),
         isSold: true
       }))
       .filter(item => item.price > 0);
   } catch (e) {
-    console.warn('Marketplace Insights error:', e);
+    console.warn('Finding API error:', e);
     return [];
   }
 }
