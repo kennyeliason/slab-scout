@@ -49,73 +49,78 @@ async function getEbayToken() {
   return data.access_token;
 }
 
-// Search sold items via Finding API (findCompletedItems)
+// Search sold items by scraping eBay's sold listings page (no API rate limits!)
 async function searchSoldItems(token, query, grade, cardInfo, tier) {
-  // Finding API uses the App ID (Client ID) directly, not OAuth
-  const config = await chrome.storage.sync.get(['ebayClientId']);
-  if (!config.ebayClientId) return [];
-  
-  const params = new URLSearchParams({
-    'OPERATION-NAME': 'findCompletedItems',
-    'SERVICE-VERSION': '1.13.0',
-    'SECURITY-APPNAME': config.ebayClientId,
-    'RESPONSE-DATA-FORMAT': 'JSON',
-    'REST-PAYLOAD': '',
-    'keywords': query,
-    'itemFilter(0).name': 'SoldItemsOnly',
-    'itemFilter(0).value': 'true',
-    'itemFilter(1).name': 'Currency',
-    'itemFilter(1).value': 'USD',
-    'sortOrder': 'EndTimeSoonest',
-    'paginationInput.entriesPerPage': '50'
-  });
-
   try {
-    const url = `https://svcs.ebay.com/services/search/FindingService/v1?${params}`;
-    console.log(`[Slab Scout] Finding API query: ${query}`);
-    console.log(`[Slab Scout] Finding API URL: ${url}`);
+    const params = new URLSearchParams({
+      _nkw: query,
+      LH_Complete: '1',
+      LH_Sold: '1',
+      _sop: '13',  // Sort: end date recent first
+      _ipg: '60'
+    });
+    
+    const url = `https://www.ebay.com/sch/i.html?${params}`;
+    console.log(`[Slab Scout] Scraping sold listings: ${query}`);
     
     const response = await fetch(url);
-
     if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`[Slab Scout] Finding API returned ${response.status}:`, errText.slice(0, 500));
+      console.warn(`[Slab Scout] eBay search returned ${response.status}`);
       return [];
     }
-
-    const data = await response.json();
-    console.log(`[Slab Scout] Finding API response:`, JSON.stringify(data).slice(0, 1000));
-    const items = data.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
     
-    return items
-      .filter(item => {
-        const title = (item.title?.[0] || '').toUpperCase();
-        // Must contain PSA + some grade number
-        if (!/PSA\s*\d+/.test(title)) return false;
-        if (grade && !title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
-        if (tier <= 1 && cardInfo.playerName) {
-          const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
-          const lastName = nameParts[nameParts.length - 1];
-          if (!title.includes(lastName)) return false;
-        }
-        if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
-        const sellingState = item.sellingStatus?.[0]?.sellingState?.[0];
-        if (sellingState !== 'EndedWithSales') return false;
-        return true;
-      })
-      .map(item => ({
-        title: item.title?.[0] || '',
-        price: parseFloat(item.sellingStatus?.[0]?.convertedCurrentPrice?.[0]?.__value__ || 
-                          item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0),
+    const html = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    const items = [];
+    const listings = doc.querySelectorAll('.s-item');
+    
+    for (const listing of listings) {
+      const titleEl = listing.querySelector('.s-item__title span, .s-item__title');
+      const priceEl = listing.querySelector('.s-item__price');
+      const linkEl = listing.querySelector('.s-item__link');
+      const imgEl = listing.querySelector('.s-item__image-img');
+      const dateEl = listing.querySelector('.s-item__title--tagblock .POSITIVE, .s-item__ended-date, .s-item__endedDate');
+      
+      const title = titleEl?.textContent?.trim() || '';
+      if (!title || title === 'Shop on eBay' || title === 'Results matching fewer words') continue;
+      
+      // Extract price
+      let priceText = priceEl?.textContent?.trim() || '';
+      const priceMatch = priceText.match(/\$([\d,]+\.?\d*)/);
+      const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
+      if (price <= 0) continue;
+      
+      const titleUpper = title.toUpperCase();
+      
+      // Must contain PSA + grade number
+      if (!/PSA\s*\d+/i.test(title)) continue;
+      if (grade && !titleUpper.includes(`PSA ${grade}`) && !titleUpper.includes(`PSA${grade}`)) continue;
+      
+      if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/i.test(title)) continue;
+      
+      if (tier <= 1 && cardInfo.playerName) {
+        const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
+        const lastName = nameParts[nameParts.length - 1];
+        if (!titleUpper.includes(lastName)) continue;
+      }
+      
+      items.push({
+        title,
+        price,
         currency: 'USD',
-        date: item.listingInfo?.[0]?.endTime?.[0],
-        url: item.viewItemURL?.[0],
-        image: item.galleryURL?.[0]?.replace('s-l140', 's-l300'),
+        date: dateEl?.textContent?.trim() || '',
+        url: linkEl?.href || '',
+        image: imgEl?.src || imgEl?.dataset?.src || '',
         isSold: true
-      }))
-      .filter(item => item.price > 0);
+      });
+    }
+    
+    console.log(`[Slab Scout] Scraped ${items.length} sold items`);
+    return items;
   } catch (e) {
-    console.warn('Finding API error:', e);
+    console.warn('[Slab Scout] Scrape error:', e);
     return [];
   }
 }
