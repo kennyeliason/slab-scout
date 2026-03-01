@@ -330,6 +330,82 @@
   font-weight: 600;
 }
 
+/* Expandable rows */
+.ss-grade-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ss-row-expanded {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ss-expand-icon {
+  color: #666;
+  font-size: 11px;
+  transition: transform 0.15s;
+  text-align: center;
+  width: 20px;
+}
+
+/* Comp detail rows */
+.ss-comp-detail td {
+  padding: 0 !important;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ss-comp-list {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ss-comp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.ss-comp-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ss-comp-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.ss-comp-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ss-comp-price {
+  font-weight: 600;
+  font-size: 13px;
+  color: #e0e0e0;
+}
+
+.ss-comp-date {
+  font-size: 10px;
+  color: #888;
+}
+
+.ss-comp-link {
+  color: #e94560;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
 /* No data rows */
 .ss-no-data-row {
   opacity: 0.5;

@@ -243,6 +243,8 @@
         <tbody>
     `;
 
+    const colCount = isAuction ? 6 : 5;
+    
     for (const grade of grades) {
       if (comps[grade]) {
         const p = profit[grade];
@@ -255,20 +257,39 @@
         
         const maxBidVal = maxBids[grade] ? `$${Math.floor(maxBids[grade]).toLocaleString()}` : '—';
         tableHTML += `
-          <tr class="${grade == bestGrade ? 'ss-best-row' : ''}">
+          <tr class="ss-grade-row ${grade == bestGrade ? 'ss-best-row' : ''}" data-grade="${grade}" style="cursor:pointer;">
             <td><span class="ss-grade-badge ss-grade-${grade >= 9 ? 'gem' : grade >= 7 ? 'high' : grade >= 5 ? 'mid' : 'low'}">PSA ${grade}</span></td>
             <td>$${p.gradedAvg.toLocaleString(undefined, {maximumFractionDigits: 0})}${lowConfidence ? ' ⚠️' : ''}</td>
             <td class="ss-range">${p.gradedRange} <span class="ss-comp-count">(${compCount})</span></td>
             ${isAuction ? `<td class="ss-max-bid-cell">${maxBidVal}</td>` : ''}
             <td class="${profitClass}">${profitStr}</td>
-            <td>${p.verdict}</td>
+            <td class="ss-expand-icon">▸</td>
+          </tr>
+          <tr class="ss-comp-detail" data-grade-detail="${grade}" style="display:none;">
+            <td colspan="${colCount}">
+              <div class="ss-comp-list">
+                ${comps[grade].items.map(item => {
+                  const date = item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                  return `
+                    <a href="${item.url}" target="_blank" class="ss-comp-item" title="${item.title}">
+                      ${item.image ? `<img src="${item.image}" class="ss-comp-thumb" alt="">` : ''}
+                      <div class="ss-comp-info">
+                        <div class="ss-comp-price">$${item.price.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                        <div class="ss-comp-date">${date}</div>
+                      </div>
+                      <div class="ss-comp-link">↗</div>
+                    </a>
+                  `;
+                }).join('')}
+              </div>
+            </td>
           </tr>
         `;
       } else {
         tableHTML += `
           <tr class="ss-no-data-row">
             <td><span class="ss-grade-badge ss-grade-${grade >= 9 ? 'gem' : grade >= 7 ? 'high' : grade >= 5 ? 'mid' : 'low'}">PSA ${grade}</span></td>
-            <td colspan="${isAuction ? 4 : 3}" class="ss-no-data">No recent sold comps</td>
+            <td colspan="${colCount - 2}" class="ss-no-data">No recent sold comps</td>
             <td>—</td>
           </tr>
         `;
@@ -277,6 +298,24 @@
 
     tableHTML += '</tbody></table>';
     tableEl.innerHTML = tableHTML;
+    
+    // Add click handlers for expandable rows
+    tableEl.querySelectorAll('.ss-grade-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const grade = row.dataset.grade;
+        const detail = tableEl.querySelector(`[data-grade-detail="${grade}"]`);
+        const icon = row.querySelector('.ss-expand-icon');
+        if (detail.style.display === 'none') {
+          detail.style.display = 'table-row';
+          icon.textContent = '▾';
+          row.classList.add('ss-row-expanded');
+        } else {
+          detail.style.display = 'none';
+          icon.textContent = '▸';
+          row.classList.remove('ss-row-expanded');
+        }
+      });
+    });
     
     const hasNoData = grades.some(g => !comps[g]);
     const hasLowConf = Object.values(comps).some(c => c.count <= 1);
