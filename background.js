@@ -70,32 +70,66 @@ async function searchSoldItems(token, query, grade, cardInfo, tier) {
     }
     
     const html = await response.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
     
+    // eBay uses two different HTML structures depending on layout
+    // Newer: .s-card with su-styled-text spans
+    // Older: .s-item with s-item__title, s-item__price
     const items = [];
-    const listings = doc.querySelectorAll('.s-item');
     
-    for (const listing of listings) {
-      const titleEl = listing.querySelector('.s-item__title span, .s-item__title');
-      const priceEl = listing.querySelector('.s-item__price');
-      const linkEl = listing.querySelector('.s-item__link');
-      const imgEl = listing.querySelector('.s-item__image-img');
-      const dateEl = listing.querySelector('.s-item__title--tagblock .POSITIVE, .s-item__ended-date, .s-item__endedDate');
+    // Parse using regex — more reliable than DOMParser since eBay's HTML is quirky
+    // Each listing starts with data-listingid=
+    const listingBlocks = html.split(/(?=data-listingid=\d)/);
+    
+    for (const block of listingBlocks) {
+      if (block.length < 100) continue;
       
-      const title = titleEl?.textContent?.trim() || '';
-      if (!title || title === 'Shop on eBay' || title === 'Results matching fewer words') continue;
+      // Extract listing ID
+      const idMatch = block.match(/data-listingid=(\d+)/);
+      if (!idMatch) continue;
       
-      // Extract price
-      let priceText = priceEl?.textContent?.trim() || '';
-      const priceMatch = priceText.match(/\$([\d,]+\.?\d*)/);
-      const price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, '')) : 0;
+      // Extract title from alt tag or su-styled-text
+      let title = '';
+      const altMatch = block.match(/class=s-card__image[^>]*alt="([^"]+)"/);
+      if (altMatch) {
+        title = altMatch[1];
+      } else {
+        // Try su-styled-text primary
+        const styledTexts = [...block.matchAll(/class="su-styled-text[^"]*primary[^"]*"[^>]*>([^<]+)</g)];
+        for (const m of styledTexts) {
+          const t = m[1].trim();
+          if (t.length > 10 && t !== 'Shop on eBay') { title = t; break; }
+        }
+      }
+      
+      if (!title || title === 'Shop on eBay') continue;
+      
+      // Extract price (first dollar amount, skip shipping)
+      const priceMatches = [...block.matchAll(/\$([\d,]+\.?\d*)/g)];
+      let price = 0;
+      if (priceMatches.length > 0) {
+        price = parseFloat(priceMatches[0][1].replace(/,/g, ''));
+      }
       if (price <= 0) continue;
+      
+      // Check if this is actually a sold item (look for "Sold" text)
+      const isSold = /Sold\s+\w+\s+\d/i.test(block);
+      
+      // Extract sold date
+      const dateMatch = block.match(/Sold\s+([\w]+\s+\d+,?\s*\d*)/i);
+      const date = dateMatch ? dateMatch[1].trim() : '';
+      
+      // Extract URL
+      const urlMatch = block.match(/href=(https:\/\/www\.ebay\.com\/itm\/\d+[^\s>'"]*)/);
+      const url = urlMatch ? urlMatch[1].split('&')[0] : `https://www.ebay.com/itm/${idMatch[1]}`;
+      
+      // Extract image
+      const imgMatch = block.match(/src=(https:\/\/i\.ebayimg\.com\/images\/[^\s>'"]+)/);
+      const image = imgMatch ? imgMatch[1] : '';
       
       const titleUpper = title.toUpperCase();
       
       // Must contain PSA + grade number
-      if (!/PSA\s*\d+/i.test(title)) continue;
+      if (!/PSA\s*\d/i.test(title)) continue;
       if (grade && !titleUpper.includes(`PSA ${grade}`) && !titleUpper.includes(`PSA${grade}`)) continue;
       
       if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/i.test(title)) continue;
@@ -110,14 +144,14 @@ async function searchSoldItems(token, query, grade, cardInfo, tier) {
         title,
         price,
         currency: 'USD',
-        date: dateEl?.textContent?.trim() || '',
-        url: linkEl?.href || '',
-        image: imgEl?.src || imgEl?.dataset?.src || '',
-        isSold: true
+        date,
+        url,
+        image,
+        isSold
       });
     }
     
-    console.log(`[Slab Scout] Scraped ${items.length} sold items`);
+    console.log(`[Slab Scout] Scraped ${items.length} items (${items.filter(i => i.isSold).length} sold)`);
     return items;
   } catch (e) {
     console.warn('[Slab Scout] Scrape error:', e);
