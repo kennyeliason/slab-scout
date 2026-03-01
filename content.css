@@ -704,6 +704,72 @@
   border-left: 3px solid #7c3aed;
 }
 
+/* Win toast 🎉 */
+#ss-win-toast {
+  position: fixed;
+  bottom: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999999;
+  transition: bottom 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#ss-win-toast.ss-win-show {
+  bottom: 30px;
+}
+
+.ss-win-content {
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  border: 1px solid rgba(233, 69, 96, 0.4);
+  border-radius: 16px;
+  padding: 20px 24px;
+  text-align: center;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  position: relative;
+  min-width: 280px;
+}
+
+.ss-win-emoji {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.ss-win-text {
+  color: #e0e0e0;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ss-win-venmo {
+  display: inline-block;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #3d95ce, #008CFF);
+  color: white;
+  text-decoration: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: opacity 0.2s;
+}
+
+.ss-win-venmo:hover {
+  opacity: 0.9;
+}
+
+.ss-win-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+}
+
 /* Scrollbar */
 #slab-scout-panel::-webkit-scrollbar {
   width: 6px;

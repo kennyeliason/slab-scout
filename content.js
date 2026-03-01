@@ -689,6 +689,51 @@
     }
   }
 
+  // Check for auction win 🎉
+  function checkForWin() {
+    const pageText = document.body?.innerText || '';
+    const wonIndicators = [
+      /you\s*(won|\'ve won|have won)/i,
+      /congratulations.*buyer/i,
+      /you\s*are\s*the\s*(winning|highest)\s*bidder/i,
+      /order\s*confirmed/i,
+      /you\s*bought\s*this/i
+    ];
+    
+    const isWin = wonIndicators.some(r => r.test(pageText));
+    if (!isWin) return;
+    
+    // Only show once per listing
+    const listingId = window.location.pathname.match(/\/itm\/(\d+)/)?.[1];
+    if (!listingId) return;
+    const shownKey = `ss_win_${listingId}`;
+    if (sessionStorage.getItem(shownKey)) return;
+    sessionStorage.setItem(shownKey, '1');
+    
+    // 🎉 Show the toast
+    const toast = document.createElement('div');
+    toast.id = 'ss-win-toast';
+    toast.innerHTML = `
+      <div class="ss-win-content">
+        <div class="ss-win-emoji">🎉🃏💰</div>
+        <div class="ss-win-text">Nice win! Don't forget the little people...</div>
+        <a href="https://venmo.com/kennyeliason" target="_blank" class="ss-win-venmo">
+          Buy the dev a coffee ☕ →
+        </a>
+        <button class="ss-win-close">✕</button>
+      </div>
+    `;
+    document.body.appendChild(toast);
+    
+    toast.querySelector('.ss-win-close').onclick = () => toast.remove();
+    setTimeout(() => toast.classList.add('ss-win-show'), 100);
+    setTimeout(() => { if (toast.parentNode) toast.classList.remove('ss-win-show'); }, 15000);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15500);
+  }
+  
+  // Check after page settles
+  setTimeout(checkForWin, 3000);
+
   // Run on page load
   init();
 })();
