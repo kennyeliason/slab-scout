@@ -308,18 +308,27 @@ function parseCardTitle(title) {
   return info;
 }
 
-// Calculate profit scenarios
-function calculateProfit(rawPrice, gradedComps, gradingFee = GRADING_FEES.regular) {
+// Calculate profit scenarios with real costs
+function calculateProfit(rawPrice, gradedComps, gradingFee = GRADING_FEES.regular, salesTaxRate = 0.08, ebayFeeRate = 0.15) {
   const scenarios = {};
   
   for (const [grade, data] of Object.entries(gradedComps)) {
     const avgGraded = data.avg;
-    const profit = avgGraded - rawPrice - gradingFee;
-    const roi = rawPrice > 0 ? (profit / (rawPrice + gradingFee)) * 100 : 0;
+    
+    // Total cost: purchase + sales tax + grading fee
+    const totalCost = (rawPrice * (1 + salesTaxRate)) + gradingFee;
+    
+    // Net revenue: sale price minus eBay fees (13.25% final value + payment processing ≈ 15%)
+    const netRevenue = avgGraded * (1 - ebayFeeRate);
+    
+    const profit = netRevenue - totalCost;
+    const roi = totalCost > 0 ? (profit / totalCost) * 100 : 0;
     
     scenarios[grade] = {
       gradedAvg: avgGraded,
       gradedRange: `$${data.low.toLocaleString()} - $${data.high.toLocaleString()}`,
+      totalCost: totalCost,
+      netRevenue: netRevenue,
       profit: profit,
       roi: roi,
       verdict: profit > 0 ? '✅' : '❌'
@@ -448,13 +457,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'FETCH_COMPS') {
     (async () => {
       try {
-        const config = await chrome.storage.sync.get(['gradingFee']);
+        const config = await chrome.storage.sync.get(['gradingFee', 'salesTaxRate', 'ebayFeeRate']);
         // Prefer listing's grading fee > user setting > default
         const fee = message.listingGradingFee || config.gradingFee || GRADING_FEES.regular;
         const feeSource = message.listingGradingFee ? 'listing' : 'settings';
+        const salesTax = config.salesTaxRate ?? 0.08;
+        const ebayFee = config.ebayFeeRate ?? 0.15;
         const comps = await searchGradedComps(message.cardInfo);
-        const profit = calculateProfit(message.rawPrice, comps, fee);
-        sendResponse({ success: true, comps, profit, gradingFee: fee, feeSource });
+        const profit = calculateProfit(message.rawPrice, comps, fee, salesTax, ebayFee);
+        sendResponse({ success: true, comps, profit, gradingFee: fee, feeSource, salesTaxRate: salesTax, ebayFeeRate: ebayFee });
       } catch (error) {
         sendResponse({ success: false, error: error.message });
       }

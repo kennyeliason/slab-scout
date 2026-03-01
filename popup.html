@@ -189,16 +189,30 @@
     </div>
 
     <div class="section">
-      <div class="section-title">Grading Fee</div>
+      <div class="section-title">Profit Calculator</div>
       <div class="input-group">
-        <label>PSA grading cost (used for profit calculation)</label>
+        <label>PSA grading fee</label>
         <div style="display:flex;gap:8px;align-items:center;">
           <span style="color:#e94560;font-size:18px;font-weight:700;">$</span>
           <input type="text" id="gradingFee" placeholder="150" style="width:100px;">
-          <span style="color:#666;font-size:12px;">per card</span>
+          <span style="color:#666;font-size:12px;">per card (auto-detected from listing when available)</span>
         </div>
       </div>
-      <p style="font-size:11px;color:#666;line-height:1.5;margin-top:4px;">Check <a href="https://www.psacard.com/pricing" target="_blank" style="color:#e94560;text-decoration:none;">psacard.com/pricing</a> for current rates. Default: $150 (Regular tier)</p>
+      <div class="input-group" style="margin-top:8px;">
+        <label>Sales tax on purchase</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="salesTaxRate" placeholder="8" style="width:60px;">
+          <span style="color:#666;font-size:12px;">% (added to buy price)</span>
+        </div>
+      </div>
+      <div class="input-group" style="margin-top:8px;">
+        <label>eBay seller fees</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="ebayFeeRate" placeholder="15" style="width:60px;">
+          <span style="color:#666;font-size:12px;">% (deducted from sale price)</span>
+        </div>
+      </div>
+      <p style="font-size:11px;color:#666;line-height:1.5;margin-top:8px;">Profit = (Sale price × (1 - eBay fees)) - (Buy price × (1 + tax)) - Grading fee</p>
     </div>
 
     <div class="section">

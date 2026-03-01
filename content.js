@@ -153,7 +153,7 @@
   }
 
   // Show grade comparison table
-  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee, isAuction, feeSource) {
+  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee, isAuction, feeSource, salesTaxRate, ebayFeeRate) {
     const resultsEl = panel.querySelector('.ss-results');
     const summaryEl = panel.querySelector('.ss-summary');
     const tableEl = panel.querySelector('.ss-grade-table');
@@ -179,10 +179,15 @@
     const doubleUpGrades = profitableGrades.filter(([g, p]) => p.roi >= 100); // 2x+
     const lowestDoubleUp = doubleUpGrades.sort((a, b) => parseInt(a[0]) - parseInt(b[0]))[0];
 
-    // Calculate max bid thresholds (for each grade: avg sold - grading fee = break-even price)
+    // Calculate max bid thresholds accounting for all costs
+    // Break-even: netRevenue = totalCost → sale*(1-ebayFee) = buy*(1+tax) + gradingFee
+    // Solve for buy: buy = (sale*(1-ebayFee) - gradingFee) / (1+tax)
+    const taxRate = salesTaxRate || 0.08;
+    const ebayRate = ebayFeeRate || 0.15;
+    const fee = gradingFee || 150;
     const maxBids = {};
     for (const [grade, data] of Object.entries(profit)) {
-      const breakeven = comps[grade].avg - (gradingFee || 150);
+      const breakeven = ((comps[grade].avg * (1 - ebayRate)) - fee) / (1 + taxRate);
       if (breakeven > 0) maxBids[grade] = breakeven;
     }
 
@@ -320,11 +325,13 @@
     const hasNoData = grades.some(g => !comps[g]);
     const hasLowConf = Object.values(comps).some(c => c.count <= 1);
     const feeLabel = feeSource === 'listing' 
-      ? `$${gradingFee || 150} grading fee (from listing)` 
-      : `$${gradingFee || 150} grading fee (from settings)`;
+      ? `$${gradingFee || 150} grading (from listing)` 
+      : `$${gradingFee || 150} grading (from settings)`;
+    const taxPct = Math.round((salesTaxRate || 0.08) * 100);
+    const ebayPct = Math.round((ebayFeeRate || 0.15) * 100);
     feeEl.innerHTML = `
       <div class="ss-fee-info">
-        💰 ${feeLabel}
+        💰 ${feeLabel} + ${taxPct}% sales tax on buy + ${ebayPct}% eBay fees on sell
         <br>📊 Comp count shown in parentheses per grade
         ${hasLowConf ? '<br>⚠️ Low comp count — data may not be reliable' : ''}
         ${hasNoData ? '<br>🔍 "No recent sold comps" = no eBay sales found (rare/high-end cards may sell at auction houses)' : ''}
@@ -391,7 +398,7 @@
     panel.querySelector('.ss-loading').style.display = 'none';
 
     if (response.success) {
-      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction, response.feeSource);
+      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction, response.feeSource, response.salesTaxRate, response.ebayFeeRate);
       
       // Show AI Grade button if OpenAI is configured
       if (configCheck.hasOpenAI) {
@@ -564,7 +571,7 @@
       `;
     } else if (likelyProfit) {
       // Likely grade is a loss
-      const maxPayable = comps[likelyGrade] ? Math.floor(comps[likelyGrade].avg - fee) : 0;
+      const maxPayable = comps[likelyGrade] ? Math.floor(((comps[likelyGrade].avg * (1 - (ebayFeeRate || 0.15))) - (gradingFee || 150)) / (1 + (salesTaxRate || 0.08))) : 0;
       summaryEl.innerHTML = `
         <div class="ss-best ss-best-negative">
           <div class="ss-best-label">❌ AI estimates PSA ${likelyGrade} → not profitable at ${priceLabel}</div>
