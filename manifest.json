@@ -5,7 +5,7 @@
   "description": "See graded card comps instantly while browsing raw cards on eBay. Know the grading gap before you buy.",
   "author": "Kenny Eliason",
   "permissions": ["activeTab", "storage"],
-  "host_permissions": ["https://www.ebay.com/*", "https://api.ebay.com/*"],
+  "host_permissions": ["https://www.ebay.com/*", "https://api.ebay.com/*", "https://svcs.ebay.com/*", "https://api.openai.com/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
