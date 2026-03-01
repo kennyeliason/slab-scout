@@ -67,7 +67,7 @@ async function searchSoldItems(token, query, grade, cardInfo, tier) {
     'itemFilter(1).name': 'Currency',
     'itemFilter(1).value': 'USD',
     'sortOrder': 'EndTimeSoonest',
-    'paginationInput.entriesPerPage': '15'
+    'paginationInput.entriesPerPage': '50'
   });
 
   try {
@@ -90,14 +90,15 @@ async function searchSoldItems(token, query, grade, cardInfo, tier) {
     return items
       .filter(item => {
         const title = (item.title?.[0] || '').toUpperCase();
-        if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
+        // Must contain PSA + some grade number
+        if (!/PSA\s*\d+/.test(title)) return false;
+        if (grade && !title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
         if (tier <= 1 && cardInfo.playerName) {
           const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
           const lastName = nameParts[nameParts.length - 1];
           if (!title.includes(lastName)) return false;
         }
         if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
-        // Must be actually sold (not just ended unsold)
         const sellingState = item.sellingStatus?.[0]?.sellingState?.[0];
         if (sellingState !== 'EndedWithSales') return false;
         return true;
@@ -128,7 +129,7 @@ async function searchActiveItems(token, query, grade, cardInfo, tier) {
       'priceCurrency:USD'
     ].join(','),
     sort: '-endDate',
-    limit: '15'
+    limit: '50'
   });
 
   const response = await fetch(
@@ -147,7 +148,8 @@ async function searchActiveItems(token, query, grade, cardInfo, tier) {
   return (data.itemSummaries || [])
     .filter(item => {
       const title = item.title.toUpperCase();
-      if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
+      if (!/PSA\s*\d+/.test(title)) return false;
+      if (grade && !title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
       if (tier <= 1 && cardInfo.playerName) {
         const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
         const lastName = nameParts[nameParts.length - 1];
@@ -169,126 +171,138 @@ async function searchActiveItems(token, query, grade, cardInfo, tier) {
 }
 
 // Search eBay sold/completed listings for graded versions
+// Strategy: ONE broad search per tier, then bucket results by grade client-side
 async function searchGradedComps(cardInfo) {
   const token = await getEbayToken();
   const results = {};
-  
   const grades = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   
-  for (const grade of grades) {
-    const queries = buildGradedQueries(cardInfo, grade);
-    let foundItems = null;
-    let usedTier = 0;
-    
-    // Try each query tier until we get results
-    for (let tier = 0; tier < queries.length; tier++) {
-      try {
-        // Try Finding API first (SOLD items)
-        let items = await searchSoldItems(token, queries[tier], grade, cardInfo, tier);
-        console.log(`[Slab Scout] PSA ${grade} tier ${tier}: ${items.length} sold items found`);
+  // Build tiered queries WITHOUT a specific grade (we'll filter by grade from results)
+  const queries = buildBroadQueries(cardInfo);
+  
+  let allSoldItems = [];
+  let allActiveItems = [];
+  let usedTier = 0;
+  
+  // Try each query tier until we get decent results
+  for (let tier = 0; tier < queries.length; tier++) {
+    try {
+      // One sold search
+      const soldItems = await searchSoldItems(token, queries[tier], null, cardInfo, tier);
+      console.log(`[Slab Scout] Tier ${tier} broad sold search: ${soldItems.length} items for "${queries[tier]}"`);
+      
+      if (soldItems.length >= 3) {
+        allSoldItems = soldItems;
+        usedTier = tier;
+        break;
+      }
+      
+      // Fallback: one active search
+      if (tier === queries.length - 1 || soldItems.length === 0) {
+        const activeItems = await searchActiveItems(token, queries[tier], null, cardInfo, tier);
+        activeItems.forEach(i => i.isActive = true);
+        console.log(`[Slab Scout] Tier ${tier} broad active search: ${activeItems.length} items`);
         
-        // Fallback to Browse API (active listings) if no sold data
-        if (items.length === 0) {
-          items = await searchActiveItems(token, queries[tier], grade, cardInfo, tier);
-          items.forEach(i => i.isActive = true);
-          console.log(`[Slab Scout] PSA ${grade} tier ${tier}: ${items.length} active items (fallback)`);
-        }
-        
-        if (items.length >= 2 || (tier === queries.length - 1 && items.length > 0)) {
-          foundItems = items;
+        if (soldItems.length + activeItems.length >= 3 || tier === queries.length - 1) {
+          allSoldItems = soldItems;
+          allActiveItems = activeItems;
           usedTier = tier;
           break;
         }
-      } catch (e) {
-        console.error(`Error fetching PSA ${grade} (tier ${tier}):`, e);
       }
+    } catch (e) {
+      console.error(`[Slab Scout] Tier ${tier} error:`, e);
     }
+  }
+  
+  // Combine and bucket by grade
+  const allItems = [...allSoldItems, ...allActiveItems];
+  
+  for (const grade of grades) {
+    const gradeItems = allItems.filter(item => {
+      const title = item.title.toUpperCase();
+      return title.includes(`PSA ${grade}`) || title.includes(`PSA${grade}`);
+    });
     
-    if (foundItems && foundItems.length > 0) {
-      // Remove outliers using IQR method
-      const sorted = [...foundItems].sort((a, b) => a.price - b.price);
-      const q1 = sorted[Math.floor(sorted.length * 0.25)]?.price || sorted[0].price;
-      const q3 = sorted[Math.floor(sorted.length * 0.75)]?.price || sorted[sorted.length - 1].price;
-      const iqr = q3 - q1;
-      const lowerBound = q1 - (iqr * 1.5);
-      const upperBound = q3 + (iqr * 1.5);
+    if (gradeItems.length === 0) continue;
+    
+    // Remove outliers using IQR method
+    const sorted = [...gradeItems].sort((a, b) => a.price - b.price);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)]?.price || sorted[0].price;
+    const q3 = sorted[Math.floor(sorted.length * 0.75)]?.price || sorted[sorted.length - 1].price;
+    const iqr = q3 - q1;
+    const lowerBound = q1 - (iqr * 1.5);
+    const upperBound = q3 + (iqr * 1.5);
+    
+    const filtered = gradeItems.filter(i => {
+      if (gradeItems.length <= 3) return true;
+      return i.price >= Math.max(lowerBound, 1) && i.price <= upperBound;
+    }).slice(0, 5);
+    
+    if (filtered.length > 0) {
+      const prices = filtered.map(i => i.price);
+      const sortedPrices = [...prices].sort((a, b) => a - b);
+      const median = sortedPrices.length % 2 === 0
+        ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
+        : sortedPrices[Math.floor(sortedPrices.length/2)];
       
-      const filtered = foundItems.filter(i => {
-        if (foundItems.length <= 3) return true;
-        return i.price >= Math.max(lowerBound, 1) && i.price <= upperBound;
-      }).slice(0, 5);
-      
-      if (filtered.length > 0) {
-        const prices = filtered.map(i => i.price);
-        const sortedPrices = [...prices].sort((a, b) => a - b);
-        const median = sortedPrices.length % 2 === 0
-          ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
-          : sortedPrices[Math.floor(sortedPrices.length/2)];
-        
-        const hasActiveFallback = filtered.some(i => i.isActive);
-        results[grade] = {
-          items: filtered,
-          low: Math.min(...prices),
-          high: Math.max(...prices),
-          avg: median,
-          count: filtered.length,
-          searchTier: usedTier,
-          dataSource: hasActiveFallback ? 'active' : 'sold'
-        };
-      }
+      const hasActiveFallback = filtered.some(i => i.isActive);
+      results[grade] = {
+        items: filtered,
+        low: Math.min(...prices),
+        high: Math.max(...prices),
+        avg: median,
+        count: filtered.length,
+        searchTier: usedTier,
+        dataSource: hasActiveFallback ? 'active' : 'sold'
+      };
     }
   }
 
   return results;
 }
 
-// Build search queries with fallback tiers (tight → loose)
-function buildGradedQueries(cardInfo, grade) {
+// Build broad search queries (no specific grade — we bucket from results)
+function buildBroadQueries(cardInfo) {
   const queries = [];
   
-  // Tier 1: Full specificity — name + year + set + card# + variants
+  // Tier 0: Full specificity — name + year + set + card# + PSA
   {
     const parts = [];
     if (cardInfo.playerName) parts.push(`"${cardInfo.playerName}"`);
     if (cardInfo.year) parts.push(cardInfo.year);
     if (cardInfo.setName) parts.push(cardInfo.setName);
     if (cardInfo.cardNumber) parts.push(`#${cardInfo.cardNumber}`);
-    if (cardInfo.variants) {
-      const priceVariants = cardInfo.variants.filter(v => 
-        /^(Refractor|Auto|Autograph|Patch|Rookie|RC|1st Bowman|\/\d+)$/i.test(v)
-      );
-      priceVariants.forEach(v => parts.push(v));
-    }
-    parts.push(`PSA ${grade}`);
+    parts.push('PSA');
     queries.push(parts.join(' '));
   }
   
-  // Tier 2: Name + year + set (no card#, no variants)
+  // Tier 1: Name + year + set + PSA (no card#)
   {
     const parts = [];
     if (cardInfo.playerName) parts.push(`"${cardInfo.playerName}"`);
     if (cardInfo.year) parts.push(cardInfo.year);
     if (cardInfo.setName) parts.push(cardInfo.setName);
-    parts.push(`PSA ${grade}`);
+    parts.push('PSA');
     const q = parts.join(' ');
     if (q !== queries[0]) queries.push(q);
   }
   
-  // Tier 3: Name + year only (no quotes on name)
+  // Tier 2: Name + year + PSA (no quotes)
   {
     const parts = [];
     if (cardInfo.playerName) parts.push(cardInfo.playerName);
     if (cardInfo.year) parts.push(cardInfo.year);
-    parts.push(`PSA ${grade}`);
+    parts.push('PSA');
     const q = parts.join(' ');
     if (!queries.includes(q)) queries.push(q);
   }
   
-  // Tier 4: Just name + PSA grade (broadest)
+  // Tier 3: Just name + PSA (broadest)
   {
     const parts = [];
     if (cardInfo.playerName) parts.push(cardInfo.playerName);
-    parts.push(`PSA ${grade}`);
+    parts.push('PSA');
     const q = parts.join(' ');
     if (!queries.includes(q)) queries.push(q);
   }
