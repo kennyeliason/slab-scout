@@ -64,6 +64,11 @@
         <div class="ss-card-info">
           <div class="ss-parsed-title"></div>
           <div class="ss-raw-price"></div>
+          <div class="ss-price-override">
+            <label>Your max bid: $</label>
+            <input type="text" class="ss-price-input" placeholder="Enter price">
+            <button class="ss-recalc-btn">Recalc</button>
+          </div>
         </div>
         <div class="ss-loading" style="display:none;">
           <div class="ss-spinner"></div>
@@ -399,6 +404,48 @@
     panel.querySelector('.ss-loading').style.display = 'none';
 
     if (response.success) {
+      // Store data for recalc
+      panel._ssData = {
+        cardInfo: parsed.cardInfo,
+        comps: response.comps,
+        gradingFee: response.gradingFee,
+        feeSource: response.feeSource,
+        salesTaxRate: response.salesTaxRate,
+        ebayFeeRate: response.ebayFeeRate,
+        isAuction: listing.isAuction,
+        originalPrice: listing.price
+      };
+      
+      // Set up price override recalc
+      const priceInput = panel.querySelector('.ss-price-input');
+      const recalcBtn = panel.querySelector('.ss-recalc-btn');
+      priceInput.value = listing.price > 0 ? listing.price : '';
+      
+      recalcBtn.onclick = () => {
+        const newPrice = parseFloat(priceInput.value.replace(/[^0-9.]/g, ''));
+        if (!newPrice || newPrice <= 0) return;
+        
+        // Recalculate profit at new price (reuse existing comps)
+        chrome.runtime.sendMessage({
+          type: 'RECALC_PROFIT',
+          rawPrice: newPrice,
+          comps: panel._ssData.comps,
+          gradingFee: panel._ssData.gradingFee
+        }, (result) => {
+          if (result.success) {
+            const d = panel._ssData;
+            renderResults(panel, d.cardInfo, newPrice, d.comps, result.profit, result.gradingFee, d.isAuction, d.feeSource, result.salesTaxRate, result.ebayFeeRate);
+            panel.querySelector('.ss-raw-price').innerHTML = `Calculating at: <strong>$${newPrice.toLocaleString()}</strong> <span style="color:#888;font-size:11px;">(custom price)</span>`;
+            priceInput.value = newPrice;
+          }
+        });
+      };
+      
+      // Also recalc on Enter key
+      priceInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') recalcBtn.click();
+      });
+      
       renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction, response.feeSource, response.salesTaxRate, response.ebayFeeRate);
       
       // Show AI Grade button if OpenAI is configured

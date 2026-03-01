@@ -631,6 +631,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'RECALC_PROFIT') {
+    (async () => {
+      const config = await chrome.storage.sync.get(['gradingFee', 'salesTaxRate', 'ebayFeeRate']);
+      const fee = message.gradingFee || config.gradingFee || GRADING_FEES.regular;
+      const salesTax = config.salesTaxRate ?? 0.08;
+      const ebayFee = config.ebayFeeRate ?? 0.15;
+      const profit = calculateProfit(message.rawPrice, message.comps, fee, salesTax, ebayFee);
+      sendResponse({ success: true, profit, gradingFee: fee, salesTaxRate: salesTax, ebayFeeRate: ebayFee });
+    })();
+    return true;
+  }
+
   if (message.type === 'AI_GRADE') {
     (async () => {
       try {

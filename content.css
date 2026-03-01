@@ -307,6 +307,55 @@
   margin-top: 4px;
 }
 
+/* Price override */
+.ss-price-override {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.ss-price-override label {
+  font-size: 12px;
+  color: #aaa;
+  white-space: nowrap;
+}
+
+.ss-price-input {
+  width: 90px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+}
+
+.ss-price-input:focus {
+  border-color: #e94560;
+}
+
+.ss-recalc-btn {
+  padding: 5px 12px;
+  background: linear-gradient(135deg, #e94560, #c62a47);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ss-recalc-btn:hover {
+  opacity: 0.9;
+}
+
 /* Max bid recommendation */
 .ss-max-bid {
   background: rgba(245, 166, 35, 0.1);
