@@ -277,6 +277,29 @@
   font-size: 13px;
 }
 
+/* Max bid recommendation */
+.ss-max-bid {
+  background: rgba(245, 166, 35, 0.1);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f5a623;
+  text-align: center;
+}
+
+.ss-max-bid strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+/* Max bid column */
+.ss-max-bid-cell {
+  color: #f5a623;
+  font-weight: 600;
+}
+
 /* No data rows */
 .ss-no-data-row {
   opacity: 0.5;

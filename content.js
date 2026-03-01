@@ -21,7 +21,18 @@
     // Check if listing mentions grading terms (skip already-graded cards)
     const isGraded = /\b(PSA|BGS|SGC|CGC)\s*\d/i.test(title);
     
-    return { title, price, isGraded };
+    // Detect auction vs fixed price
+    const isAuction = !!(
+      document.querySelector('#bidBtn, .x-bid-action, [data-testid="x-bid-action"]') ||
+      document.querySelector('.x-bid-count, #vi-abf-cur-num') ||
+      document.querySelector('.vi-VR-cvipCntr1 #prcIsum_bidPrice') ||
+      document.querySelector('[data-testid="x-bin-price"]') === null && 
+        document.querySelector('.x-price-primary')?.textContent?.toLowerCase()?.includes('bid')
+    );
+    
+    const bidCount = document.querySelector('.x-bid-count span, #vi-abf-cur-num')?.textContent?.trim();
+    
+    return { title, price, isGraded, isAuction, bidCount };
   }
 
   // Create the scout panel
@@ -120,7 +131,7 @@
   }
 
   // Show grade comparison table
-  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee) {
+  function renderResults(panel, cardInfo, rawPrice, comps, profit, gradingFee, isAuction) {
     const resultsEl = panel.querySelector('.ss-results');
     const summaryEl = panel.querySelector('.ss-summary');
     const tableEl = panel.querySelector('.ss-grade-table');
@@ -136,8 +147,19 @@
       }
     }
 
+    // Calculate max bid thresholds (for each grade: avg sold - grading fee = break-even price)
+    const maxBids = {};
+    for (const [grade, data] of Object.entries(profit)) {
+      const breakeven = comps[grade].avg - (gradingFee || 150);
+      if (breakeven > 0) maxBids[grade] = breakeven;
+    }
+    const bestMaxBid = Object.entries(maxBids).sort((a, b) => b[1] - a[1])[0];
+
     // Summary
     if (bestGrade && bestProfit > 0) {
+      const maxBidNote = isAuction && bestMaxBid 
+        ? `<div class="ss-max-bid">💡 Pay up to <strong>$${Math.floor(bestMaxBid[1]).toLocaleString()}</strong> and still profit (PSA ${bestMaxBid[0]})</div>` 
+        : '';
       summaryEl.innerHTML = `
         <div class="ss-best">
           <div class="ss-best-label">Best opportunity</div>
@@ -145,13 +167,18 @@
           <div class="ss-best-profit">+$${bestProfit.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
           <div class="ss-best-roi">${profit[bestGrade].roi.toFixed(1)}% ROI</div>
         </div>
+        ${maxBidNote}
       `;
     } else if (Object.keys(comps).length > 0) {
+      const maxBidNote = bestMaxBid 
+        ? `<div class="ss-max-bid">💡 Pay up to <strong>$${Math.floor(bestMaxBid[1]).toLocaleString()}</strong> to break even (PSA ${bestMaxBid[0]})</div>` 
+        : '';
       summaryEl.innerHTML = `
         <div class="ss-best ss-best-negative">
-          <div class="ss-best-label">No profitable grade at this price</div>
-          <div class="ss-best-profit">Consider negotiating lower</div>
+          <div class="ss-best-label">No profitable grade at current ${isAuction ? 'bid' : 'price'}</div>
+          <div class="ss-best-profit">${isAuction ? 'Don\'t bid higher' : 'Consider negotiating lower'}</div>
         </div>
+        ${maxBidNote}
       `;
     } else {
       summaryEl.innerHTML = `
@@ -171,6 +198,7 @@
             <th>Grade</th>
             <th>Avg Sold</th>
             <th>Range</th>
+            ${isAuction ? '<th>Max Bid</th>' : ''}
             <th>Profit</th>
             <th></th>
           </tr>
@@ -188,11 +216,13 @@
         const compCount = comps[grade].count;
         const lowConfidence = compCount <= 1;
         
+        const maxBidVal = maxBids[grade] ? `$${Math.floor(maxBids[grade]).toLocaleString()}` : '—';
         tableHTML += `
           <tr class="${grade == bestGrade ? 'ss-best-row' : ''}">
             <td><span class="ss-grade-badge ss-grade-${grade >= 9 ? 'gem' : grade >= 7 ? 'high' : grade >= 5 ? 'mid' : 'low'}">PSA ${grade}</span></td>
             <td>$${p.gradedAvg.toLocaleString(undefined, {maximumFractionDigits: 0})}${lowConfidence ? ' ⚠️' : ''}</td>
             <td class="ss-range">${p.gradedRange} <span class="ss-comp-count">(${compCount})</span></td>
+            ${isAuction ? `<td class="ss-max-bid-cell">${maxBidVal}</td>` : ''}
             <td class="${profitClass}">${profitStr}</td>
             <td>${p.verdict}</td>
           </tr>
@@ -201,7 +231,7 @@
         tableHTML += `
           <tr class="ss-no-data-row">
             <td><span class="ss-grade-badge ss-grade-${grade >= 9 ? 'gem' : grade >= 7 ? 'high' : grade >= 5 ? 'mid' : 'low'}">PSA ${grade}</span></td>
-            <td colspan="3" class="ss-no-data">No recent sold comps</td>
+            <td colspan="${isAuction ? 4 : 3}" class="ss-no-data">No recent sold comps</td>
             <td>—</td>
           </tr>
         `;
@@ -241,9 +271,13 @@
 
     // Show parsed info
     panel.querySelector('.ss-parsed-title').textContent = listing.title;
-    panel.querySelector('.ss-raw-price').textContent = listing.price > 0 
-      ? `Raw Price: $${listing.price.toLocaleString()}` 
-      : 'Price: Not detected';
+    if (listing.isAuction && listing.price > 0) {
+      panel.querySelector('.ss-raw-price').innerHTML = `Current Bid: $${listing.price.toLocaleString()} 🔨 <span style="color:#f5a623;font-size:11px;">(Auction${listing.bidCount ? ' · ' + listing.bidCount : ''})</span>`;
+    } else if (listing.price > 0) {
+      panel.querySelector('.ss-raw-price').textContent = `Raw Price: $${listing.price.toLocaleString()}`;
+    } else {
+      panel.querySelector('.ss-raw-price').textContent = 'Price: Not detected';
+    }
 
     // Check if already graded
     if (listing.isGraded) {
@@ -278,7 +312,7 @@
     panel.querySelector('.ss-loading').style.display = 'none';
 
     if (response.success) {
-      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee);
+      renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction);
     } else {
       panel.querySelector('.ss-error').textContent = response.error;
       panel.querySelector('.ss-error').style.display = 'block';
