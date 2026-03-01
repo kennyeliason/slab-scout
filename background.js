@@ -218,8 +218,8 @@ function parseCardTitle(title) {
   const yearMatch = title.match(/\b(19[0-9]{2}|20[0-2][0-9])\b/);
   if (yearMatch) info.year = yearMatch[1];
   
-  // Extract card number (various formats: #123, No. 123, Card 123)
-  const numMatch = title.match(/(?:#|No\.?\s*|Card\s*)(\d+[a-zA-Z]?)\b/i);
+  // Extract card number (various formats: #123, # 123, No. 123, Card 123)
+  const numMatch = title.match(/(?:#\s*|No\.?\s*|Card\s+)(\d+[a-zA-Z]?)\b/i);
   if (numMatch) info.cardNumber = numMatch[1];
   
   // Common set/brand names — match ALL found, pick the most specific
@@ -272,28 +272,33 @@ function parseCardTitle(title) {
   let cleaned = title
     .replace(/[-–—]/g, ' ')
     .replace(/\b(19|20)\d{2}(-\d{2})?\b/g, ' ')    // years
-    .replace(/(?:#|No\.?\s*)\d+[a-zA-Z]?\b/gi, ' ') // card numbers
+    .replace(/(?:#\s*|No\.?\s*|Card\s+)\d+[a-zA-Z]?\b/gi, ' ') // card numbers
     .replace(/\b(PSA|BGS|SGC|CGC)\s*\d*\b/gi, ' ')  // grading companies
     .replace(/\b(GEM\s*MINT?|MINT|NM|EX|VG|GOOD|FAIR|POOR|GMA|CGA)\b/gi, ' ')
     .replace(/\b(Raw|Ungraded|HOF|MVP|All.?Star|Pro.?Bowl|Rookie\s*Card)\b/gi, ' ')
     .replace(/\b(Card|Lot|Set|Pack|Box|Case|Wax|Sealed|Base|Insert|SP|SSP)\b/gi, ' ')
     .replace(/\b(Refractor|Holo|Holographic|Xfractor|Shimmer|Wave|Atomic|Prizm|Chrome|Auto|Autograph|Patch|Jersey|Relic)\b/gi, ' ')
     .replace(/\b(Gold|Silver|Blue|Red|Green|Orange|Purple|Pink|Black|Numbered)\b/gi, ' ')
+    .replace(/\b(Rookie|RC|Break|Set.?Break|Basketball|Baseball|Football|Hockey|Soccer|Sport|Sports)\b/gi, ' ')
+    .replace(/\b(Chicago|Bulls|Lakers|Yankees|Dodgers|Celtics|Giants|Mets|Red\s*Sox|Warriors|Nets|Heat)\b/gi, ' ') // team names
     .replace(/\/\s*\d+\b/g, ' ')  // serial numbers
     .replace(/\b[A-Z]{2,3}\d{2,4}\b/g, ' ') // codes like RC123
     .replace(/[^a-zA-Z\s'.]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   
-  // Also remove set name from cleaned string
+  // Remove set/brand names from cleaned string
   if (bestSet) {
     cleaned = cleaned.replace(new RegExp(bestSet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ').trim();
   }
+  // Remove common brand words that might remain
+  cleaned = cleaned.replace(/\b(Topps|Bowman|Panini|Upper\s*Deck|Fleer|Donruss|Score|Star|Leaf|Hoops|Skybox|Stadium\s*Club|Finest|Heritage|Select|Mosaic|Optic|Contenders|Immaculate|O.?Pee.?Chee|OPC)\b/gi, ' ').replace(/\s+/g, ' ').trim();
   
-  // Take first 2-4 words as player name (most listings lead with player name)
-  const words = cleaned.split(/\s+/).filter(w => w.length > 1);
+  // Filter out short noise words and emoji artifacts
+  const words = cleaned.split(/\s+/).filter(w => w.length > 1 && /^[a-zA-Z'.]+$/.test(w));
+  
+  // Take first 2-3 words as player name
   if (words.length >= 2) {
-    // Cap at 3 words unless it looks like a full name (e.g., "Ken Griffey Jr")
     const nameLen = words.length >= 3 && /^(Jr|Sr|II|III|IV)$/i.test(words[2]) ? 3 : Math.min(words.length, 3);
     info.playerName = words.slice(0, nameLen).join(' ');
   } else if (words.length === 1) {
