@@ -198,6 +198,82 @@ function calculateProfit(rawPrice, gradedComps, gradingFee = GRADING_FEES.regula
   return scenarios;
 }
 
+// AI Card Grading via OpenAI Vision
+async function aiGradeCard(imageUrls, cardInfo) {
+  const config = await chrome.storage.sync.get(['openaiApiKey']);
+  if (!config.openaiApiKey) {
+    throw new Error('OpenAI API key not configured. Click the Slab Scout icon to add it.');
+  }
+
+  // Build image content array (up to 4 images to keep costs down)
+  const imageContent = imageUrls.slice(0, 4).map(url => ({
+    type: 'image_url',
+    image_url: { url, detail: 'high' }
+  }));
+
+  const cardDesc = [
+    cardInfo.playerName,
+    cardInfo.year,
+    cardInfo.setName,
+    cardInfo.cardNumber ? `#${cardInfo.cardNumber}` : ''
+  ].filter(Boolean).join(' ');
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.openaiApiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      max_tokens: 800,
+      messages: [{
+        role: 'system',
+        content: `You are an expert PSA card grader. Analyze card images and estimate a PSA grade range. Be realistic and conservative — collectors trust accuracy over optimism.
+
+Grade based on these PSA criteria:
+- **Centering**: Measure left/right and top/bottom border ratios. PSA 10 needs 55/45 or better on front, 75/25 on back. PSA 9 needs 60/40 front, 90/10 back.
+- **Corners**: Look for rounding, fraying, dinged corners, whitening. All 4 corners matter.
+- **Edges**: Check for chipping, rough cuts, whitening along edges.
+- **Surface**: Look for scratches, print lines, staining, wax marks, creases, indentations.
+
+Respond in this exact JSON format:
+{
+  "grade_low": <number 1-10>,
+  "grade_high": <number 1-10>,
+  "grade_likely": <number 1-10, your best single estimate>,
+  "confidence": "<low|medium|high>",
+  "centering": { "score": "<off-center|slightly off|well-centered|gem>", "detail": "<brief note>" },
+  "corners": { "score": "<worn|light wear|sharp|gem mint>", "detail": "<brief note>" },
+  "edges": { "score": "<rough|light wear|clean|gem mint>", "detail": "<brief note>" },
+  "surface": { "score": "<damaged|light issues|clean|gem mint>", "detail": "<brief note>" },
+  "summary": "<one sentence overall assessment>"
+}`
+      }, {
+        role: 'user',
+        content: [
+          { type: 'text', text: `Grade this raw card: ${cardDesc || 'Unknown card'}. Analyze the images for centering, corners, edges, and surface condition. Give me a PSA grade range estimate.` },
+          ...imageContent
+        ]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI API error: ${response.status} ${err.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices[0]?.message?.content || '';
+  
+  // Parse JSON from response (handle markdown code blocks)
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Could not parse AI grading response');
+  
+  return JSON.parse(jsonMatch[0]);
+}
+
 // Listen for messages from content script and popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'FETCH_COMPS') {
@@ -221,11 +297,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === 'AI_GRADE') {
+    (async () => {
+      try {
+        const result = await aiGradeCard(message.imageUrls, message.cardInfo);
+        sendResponse({ success: true, grading: result });
+      } catch (error) {
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === 'CHECK_CONFIG') {
     (async () => {
-      const config = await chrome.storage.sync.get(['ebayClientId', 'ebayClientSecret']);
+      const config = await chrome.storage.sync.get(['ebayClientId', 'ebayClientSecret', 'openaiApiKey']);
       sendResponse({ 
-        configured: !!(config.ebayClientId && config.ebayClientSecret) 
+        configured: !!(config.ebayClientId && config.ebayClientSecret),
+        hasOpenAI: !!config.openaiApiKey
       });
     })();
     return true;

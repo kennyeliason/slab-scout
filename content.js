@@ -59,6 +59,16 @@
         </div>
         <div class="ss-error" style="display:none;"></div>
         <div class="ss-results" style="display:none;">
+          <div class="ss-ai-section" style="display:none;">
+            <div class="ss-ai-result"></div>
+          </div>
+          <div class="ss-ai-btn-wrap" style="display:none;">
+            <button class="ss-ai-grade-btn">🤖 AI Grade This Card</button>
+          </div>
+          <div class="ss-ai-loading" style="display:none;">
+            <div class="ss-spinner"></div>
+            <span>Analyzing card images...</span>
+          </div>
           <div class="ss-summary"></div>
           <div class="ss-grade-table"></div>
           <div class="ss-fee-note"></div>
@@ -328,10 +338,150 @@
 
     if (response.success) {
       renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction);
+      
+      // Show AI Grade button if OpenAI is configured
+      if (configCheck.hasOpenAI) {
+        const aiBtnWrap = panel.querySelector('.ss-ai-btn-wrap');
+        aiBtnWrap.style.display = 'block';
+        
+        const aiBtn = panel.querySelector('.ss-ai-grade-btn');
+        aiBtn.onclick = async () => {
+          // Extract listing images
+          const imageUrls = getListingImages();
+          if (imageUrls.length === 0) {
+            panel.querySelector('.ss-ai-result').innerHTML = '<div class="ss-ai-error">No card images found on this listing.</div>';
+            panel.querySelector('.ss-ai-section').style.display = 'block';
+            return;
+          }
+          
+          aiBtnWrap.style.display = 'none';
+          panel.querySelector('.ss-ai-loading').style.display = 'flex';
+          
+          const aiResponse = await chrome.runtime.sendMessage({
+            type: 'AI_GRADE',
+            imageUrls,
+            cardInfo: parsed.cardInfo
+          });
+          
+          panel.querySelector('.ss-ai-loading').style.display = 'none';
+          
+          if (aiResponse.success) {
+            renderAIGrade(panel, aiResponse.grading, response.comps, response.profit, listing.price, response.gradingFee, listing.isAuction);
+          } else {
+            panel.querySelector('.ss-ai-result').innerHTML = `<div class="ss-ai-error">AI grading failed: ${aiResponse.error}</div>`;
+            panel.querySelector('.ss-ai-section').style.display = 'block';
+            aiBtnWrap.style.display = 'block';
+          }
+        };
+      }
     } else {
       panel.querySelector('.ss-error').textContent = response.error;
       panel.querySelector('.ss-error').style.display = 'block';
     }
+  }
+
+  // Extract listing images from eBay page
+  function getListingImages() {
+    const urls = new Set();
+    
+    // Main image
+    const mainImg = document.querySelector('#icImg, .ux-image-carousel-item img, [data-testid="ux-image-carousel"] img');
+    if (mainImg?.src) urls.add(mainImg.src.replace(/s-l\d+/, 's-l1600'));
+    
+    // Carousel thumbnails → get full-size versions
+    document.querySelectorAll('.ux-image-carousel-item img, #vi_main_img_fs img, .tdThumb img, [data-testid="ux-image-carousel"] img').forEach(img => {
+      let src = img.src || img.dataset?.src || '';
+      if (src) urls.add(src.replace(/s-l\d+/, 's-l1600'));
+    });
+    
+    // Image zoom URLs (higher quality)
+    document.querySelectorAll('[data-zoom-src]').forEach(el => {
+      urls.add(el.dataset.zoomSrc);
+    });
+    
+    return [...urls].filter(u => u.startsWith('http')).slice(0, 4);
+  }
+
+  // Render AI grading results
+  function renderAIGrade(panel, grading, comps, profit, rawPrice, gradingFee, isAuction) {
+    const aiSection = panel.querySelector('.ss-ai-section');
+    const aiResult = panel.querySelector('.ss-ai-result');
+    
+    const g = grading;
+    const gradeRange = g.grade_low === g.grade_high 
+      ? `PSA ${g.grade_likely}` 
+      : `PSA ${g.grade_low}–${g.grade_high}`;
+    
+    const confidenceColors = { low: '#e94560', medium: '#f5a623', high: '#10b981' };
+    const confColor = confidenceColors[g.confidence] || '#888';
+    
+    // Score badges
+    function scoreBadge(score) {
+      const colors = {
+        'gem': '#10b981', 'gem mint': '#10b981', 'well-centered': '#10b981', 'sharp': '#10b981', 'clean': '#10b981',
+        'slightly off': '#f5a623', 'light wear': '#f5a623', 'light issues': '#f5a623',
+        'off-center': '#e94560', 'worn': '#e94560', 'rough': '#e94560', 'damaged': '#e94560'
+      };
+      const color = colors[score?.toLowerCase()] || '#888';
+      return `<span style="color:${color};font-weight:600;">${score}</span>`;
+    }
+    
+    // Calculate profit at the AI-estimated likely grade
+    const likelyGrade = g.grade_likely;
+    let profitAtGrade = '';
+    if (profit[likelyGrade]) {
+      const p = profit[likelyGrade];
+      if (p.profit > 0) {
+        profitAtGrade = `<div class="ss-ai-profit ss-ai-profit-positive">At PSA ${likelyGrade}: <strong>+$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> profit (${p.roi.toFixed(0)}% ROI)</div>`;
+      } else {
+        profitAtGrade = `<div class="ss-ai-profit ss-ai-profit-negative">At PSA ${likelyGrade}: <strong>-$${Math.abs(p.profit).toLocaleString(undefined, {maximumFractionDigits: 0})}</strong> loss</div>`;
+      }
+    }
+    
+    // Worst case (low estimate)
+    let worstCase = '';
+    if (profit[g.grade_low] && g.grade_low !== likelyGrade) {
+      const p = profit[g.grade_low];
+      if (p.profit > 0) {
+        worstCase = `<div class="ss-ai-worst">Even at PSA ${g.grade_low} (worst case): +$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>`;
+      } else {
+        worstCase = `<div class="ss-ai-worst">⚠️ At PSA ${g.grade_low} (worst case): -$${Math.abs(p.profit).toLocaleString(undefined, {maximumFractionDigits: 0})}</div>`;
+      }
+    }
+
+    aiResult.innerHTML = `
+      <div class="ss-ai-header">
+        <div class="ss-ai-grade-display">
+          <div class="ss-ai-grade-range">${gradeRange}</div>
+          <div class="ss-ai-likely">Most likely: <strong>PSA ${likelyGrade}</strong></div>
+          <div class="ss-ai-confidence" style="color:${confColor}">Confidence: ${g.confidence}</div>
+        </div>
+      </div>
+      ${profitAtGrade}
+      ${worstCase}
+      <div class="ss-ai-breakdown">
+        <div class="ss-ai-criteria">
+          <div class="ss-ai-row">📐 Centering: ${scoreBadge(g.centering?.score)} <span class="ss-ai-detail">${g.centering?.detail || ''}</span></div>
+          <div class="ss-ai-row">🔲 Corners: ${scoreBadge(g.corners?.score)} <span class="ss-ai-detail">${g.corners?.detail || ''}</span></div>
+          <div class="ss-ai-row">📏 Edges: ${scoreBadge(g.edges?.score)} <span class="ss-ai-detail">${g.edges?.detail || ''}</span></div>
+          <div class="ss-ai-row">✨ Surface: ${scoreBadge(g.surface?.score)} <span class="ss-ai-detail">${g.surface?.detail || ''}</span></div>
+        </div>
+        <div class="ss-ai-summary">${g.summary}</div>
+      </div>
+    `;
+    
+    aiSection.style.display = 'block';
+    
+    // Highlight the estimated grade rows in the table
+    panel.querySelectorAll('.ss-table tbody tr').forEach(row => {
+      const badge = row.querySelector('.ss-grade-badge');
+      if (!badge) return;
+      const gradeNum = parseInt(badge.textContent.replace('PSA ', ''));
+      if (gradeNum >= g.grade_low && gradeNum <= g.grade_high) {
+        row.classList.add('ss-ai-highlight');
+        if (gradeNum === likelyGrade) row.classList.add('ss-ai-likely-row');
+      }
+    });
   }
 
   // Run on page load

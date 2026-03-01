@@ -346,6 +346,151 @@
   color: #888;
 }
 
+/* AI Grade Button */
+.ss-ai-btn-wrap {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.ss-ai-grade-btn {
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  width: 100%;
+}
+
+.ss-ai-grade-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.01);
+}
+
+.ss-ai-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  color: #7c3aed;
+  font-size: 13px;
+}
+
+/* AI Grade Results */
+.ss-ai-section {
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.ss-ai-header {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(91, 33, 182, 0.1));
+  padding: 14px;
+  text-align: center;
+}
+
+.ss-ai-grade-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ss-ai-grade-range {
+  font-size: 22px;
+  font-weight: 800;
+  color: #a78bfa;
+}
+
+.ss-ai-likely {
+  font-size: 13px;
+  color: #ccc;
+}
+
+.ss-ai-confidence {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.ss-ai-profit {
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.ss-ai-profit-positive {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.ss-ai-profit-negative {
+  background: rgba(233, 69, 96, 0.1);
+  color: #e94560;
+}
+
+.ss-ai-worst {
+  text-align: center;
+  font-size: 11px;
+  color: #888;
+  padding: 4px 14px 8px;
+}
+
+.ss-ai-breakdown {
+  padding: 12px 14px;
+}
+
+.ss-ai-criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ss-ai-row {
+  font-size: 12px;
+  color: #ddd;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ss-ai-detail {
+  color: #888;
+  font-size: 11px;
+}
+
+.ss-ai-summary {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: #aaa;
+  font-style: italic;
+}
+
+.ss-ai-error {
+  color: #e94560;
+  padding: 12px;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* AI highlighted rows in grade table */
+.ss-ai-highlight {
+  background: rgba(124, 58, 237, 0.1) !important;
+}
+
+.ss-ai-likely-row {
+  background: rgba(124, 58, 237, 0.2) !important;
+  border-left: 3px solid #7c3aed;
+}
+
 /* Scrollbar */
 #slab-scout-panel::-webkit-scrollbar {
   width: 6px;
