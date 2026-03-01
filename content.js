@@ -718,7 +718,7 @@
         <div class="ss-win-emoji">🎉🃏💰</div>
         <div class="ss-win-text">Nice win! Don't forget the little people...</div>
         <a href="https://venmo.com/kennyeliason" target="_blank" class="ss-win-venmo">
-          Buy the dev a coffee ☕ →
+          Buy Kenny an energy drink ⚡ →
         </a>
         <button class="ss-win-close">✕</button>
       </div>
