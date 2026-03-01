@@ -54,7 +54,6 @@ async function searchGradedComps(cardInfo) {
   const token = await getEbayToken();
   const results = {};
   
-  // Search for each PSA grade 1-10
   const grades = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   
   for (const grade of grades) {
@@ -65,14 +64,13 @@ async function searchGradedComps(cardInfo) {
         q: query,
         filter: [
           'buyingOptions:{FIXED_PRICE|AUCTION}',
-          'conditionIds:{2750}', // Used for graded cards
+          'conditionIds:{2750}',
           'priceCurrency:USD'
         ].join(','),
         sort: '-endDate',
-        limit: '5'
+        limit: '15' // Fetch more so we can filter aggressively
       });
 
-      // Use Browse API - item_summary/search with COMPLETED filter
       const response = await fetch(
         `${EBAY_API_BASE}/buy/browse/v1/item_summary/search?${params}`, {
           headers: {
@@ -88,9 +86,30 @@ async function searchGradedComps(cardInfo) {
         const items = (data.itemSummaries || [])
           .filter(item => {
             const title = item.title.toUpperCase();
-            return title.includes(`PSA ${grade}`) || title.includes(`PSA${grade}`);
+            // Must contain the PSA grade
+            if (!title.includes(`PSA ${grade}`) && !title.includes(`PSA${grade}`)) return false;
+            // Must contain player name (if we have one)
+            if (cardInfo.playerName) {
+              const nameParts = cardInfo.playerName.toUpperCase().split(/\s+/);
+              // Require last name at minimum
+              const lastName = nameParts[nameParts.length - 1];
+              if (!title.includes(lastName)) return false;
+            }
+            // Must match year if we have one
+            if (cardInfo.year && !title.includes(cardInfo.year)) return false;
+            // Must match card number if we have one (strong signal)
+            if (cardInfo.cardNumber) {
+              const hasNum = title.includes(`#${cardInfo.cardNumber}`) || 
+                             title.includes(`# ${cardInfo.cardNumber}`) ||
+                             title.includes(`NO. ${cardInfo.cardNumber}`) ||
+                             title.includes(`NO.${cardInfo.cardNumber}`);
+              // Card number is a very strong signal — prefer matches but don't require
+              // (some listings omit it)
+            }
+            // Filter out lots, bundles, reprints
+            if (/\b(LOT|BUNDLE|REPRINT|REPO|CUSTOM|FANTASY)\b/.test(title)) return false;
+            return true;
           })
-          .slice(0, 5)
           .map(item => ({
             title: item.title,
             price: parseFloat(item.price?.value || 0),
@@ -98,17 +117,41 @@ async function searchGradedComps(cardInfo) {
             date: item.itemEndDate || item.itemCreationDate,
             url: item.itemWebUrl,
             image: item.thumbnailImages?.[0]?.imageUrl
-          }));
+          }))
+          .filter(item => item.price > 0);
         
         if (items.length > 0) {
-          const prices = items.map(i => i.price);
-          results[grade] = {
-            items,
-            low: Math.min(...prices),
-            high: Math.max(...prices),
-            avg: prices.reduce((a, b) => a + b, 0) / prices.length,
-            count: items.length
-          };
+          // Remove outliers: drop prices below 25th percentile * 0.3 and above 75th * 3
+          // This kills the junk comps that drag averages down
+          const sorted = [...items].sort((a, b) => a.price - b.price);
+          const q1 = sorted[Math.floor(sorted.length * 0.25)]?.price || sorted[0].price;
+          const q3 = sorted[Math.floor(sorted.length * 0.75)]?.price || sorted[sorted.length - 1].price;
+          const iqr = q3 - q1;
+          const lowerBound = q1 - (iqr * 1.5);
+          const upperBound = q3 + (iqr * 1.5);
+          
+          const filtered = items.filter(i => {
+            // For small sets (<=3), keep all — not enough data to outlier-detect
+            if (items.length <= 3) return true;
+            return i.price >= Math.max(lowerBound, 1) && i.price <= upperBound;
+          }).slice(0, 5);
+          
+          if (filtered.length > 0) {
+            const prices = filtered.map(i => i.price);
+            // Use median instead of mean — more resistant to remaining outliers
+            const sortedPrices = [...prices].sort((a, b) => a - b);
+            const median = sortedPrices.length % 2 === 0
+              ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
+              : sortedPrices[Math.floor(sortedPrices.length/2)];
+            
+            results[grade] = {
+              items: filtered,
+              low: Math.min(...prices),
+              high: Math.max(...prices),
+              avg: median, // Using median, not mean
+              count: filtered.length
+            };
+          }
         }
       }
     } catch (e) {
@@ -122,10 +165,17 @@ async function searchGradedComps(cardInfo) {
 // Build search query for a specific grade
 function buildGradedQuery(cardInfo, grade) {
   const parts = [];
-  if (cardInfo.playerName) parts.push(cardInfo.playerName);
+  if (cardInfo.playerName) parts.push(`"${cardInfo.playerName}"`); // Exact phrase match
   if (cardInfo.year) parts.push(cardInfo.year);
   if (cardInfo.setName) parts.push(cardInfo.setName);
   if (cardInfo.cardNumber) parts.push(`#${cardInfo.cardNumber}`);
+  // Include key variants that significantly affect price
+  if (cardInfo.variants) {
+    const priceVariants = cardInfo.variants.filter(v => 
+      /^(Refractor|Auto|Autograph|Patch|Rookie|RC|1st Bowman|\/\d+)$/i.test(v)
+    );
+    priceVariants.forEach(v => parts.push(v));
+  }
   parts.push(`PSA ${grade}`);
   return parts.join(' ');
 }
@@ -138,40 +188,86 @@ function parseCardTitle(title) {
   const yearMatch = title.match(/\b(19[0-9]{2}|20[0-2][0-9])\b/);
   if (yearMatch) info.year = yearMatch[1];
   
-  // Extract card number
-  const numMatch = title.match(/#\s*(\d+)/);
+  // Extract card number (various formats: #123, No. 123, Card 123)
+  const numMatch = title.match(/(?:#|No\.?\s*|Card\s*)(\d+[a-zA-Z]?)\b/i);
   if (numMatch) info.cardNumber = numMatch[1];
   
-  // Common set names
+  // Common set/brand names — match ALL found, pick the most specific
   const sets = [
-    'Topps', 'Bowman', 'Panini', 'Upper Deck', 'Fleer', 'Donruss', 
+    // Multi-word sets first (more specific)
+    'Topps Chrome', 'Topps Heritage', 'Topps Finest', 'Topps Update',
+    'Topps Holiday', 'Topps Allen & Ginter', 'Topps Gypsy Queen',
+    'Bowman Chrome', 'Bowman Draft', 'Bowman Sterling', 'Bowman 1st',
+    'Upper Deck', 'SP Authentic', 'Star Co', 
+    'National Treasures', 'Panini Prizm', 'Panini Select', 'Panini Mosaic',
+    'Panini Optic', 'Panini Contenders', 'Panini Immaculate',
+    'Fleer Ultra', 'Fleer Tradition',
+    // Single-word brands
+    'Topps', 'Bowman', 'Panini', 'Fleer', 'Donruss', 
     'Score', 'Prizm', 'Select', 'Mosaic', 'Optic', 'Chrome', 'Heritage',
-    'Star', 'Star Co', 'Hoops', 'Skybox', 'SP Authentic', 'Finest',
-    'National Treasures', 'Immaculate', 'Contenders', 'Playoff',
-    'Rookie', 'RC', 'Refractor', 'Auto', 'Patch', 'Numbered'
+    'Hoops', 'Skybox', 'Finest', 'Stadium Club', 'Leaf',
+    'O-Pee-Chee', 'OPC'
   ];
   
+  // Find the longest (most specific) matching set name
+  let bestSet = '';
   for (const set of sets) {
-    if (title.toLowerCase().includes(set.toLowerCase())) {
-      info.setName = set;
-      break;
+    if (title.toLowerCase().includes(set.toLowerCase()) && set.length > bestSet.length) {
+      bestSet = set;
     }
   }
+  if (bestSet) info.setName = bestSet;
   
-  // Try to extract player name (usually first major words before year/set)
-  // Remove common non-name words
+  // Extract card variants/parallels (important for pricing)
+  const variants = [
+    'Refractor', 'Gold', 'Silver', 'Blue', 'Red', 'Green', 'Orange', 'Purple', 'Pink', 'Black',
+    'Shimmer', 'Wave', 'Holo', 'Holographic', 'Xfractor', 'Atomic',
+    'Auto', 'Autograph', 'Patch', 'Jersey', 'Relic', 'Numbered', '/25', '/50', '/99', '/100', '/150', '/199', '/250', '/500',
+    'Rookie', 'RC', '1st Bowman', 'Rated Rookie', 'RR'
+  ];
+  info.variants = [];
+  for (const v of variants) {
+    if (title.toLowerCase().includes(v.toLowerCase())) {
+      info.variants.push(v);
+    }
+  }
+  // Check for serial numbering (/XX)
+  const serialMatch = title.match(/\/\s*(\d{1,4})\b/);
+  if (serialMatch && !info.variants.some(v => v.startsWith('/'))) {
+    info.variants.push(`/${serialMatch[1]}`);
+  }
+  
+  // Extract player name more carefully
+  // Strategy: remove known noise, year, set, card number, grading terms → what's left is the player name
   let cleaned = title
-    .replace(/\b(19|20)\d{2}\b/, '')
-    .replace(/#\d+/, '')
-    .replace(/\b(PSA|BGS|SGC|CGC|Raw|Mint|NM|EX|VG|Good|Fair|Poor)\b/gi, '')
-    .replace(/\b(Card|Lot|Set|Pack|Box|Case|Wax|Sealed)\b/gi, '')
-    .replace(/[^a-zA-Z\s'-]/g, ' ')
+    .replace(/[-–—]/g, ' ')
+    .replace(/\b(19|20)\d{2}(-\d{2})?\b/g, ' ')    // years
+    .replace(/(?:#|No\.?\s*)\d+[a-zA-Z]?\b/gi, ' ') // card numbers
+    .replace(/\b(PSA|BGS|SGC|CGC)\s*\d*\b/gi, ' ')  // grading companies
+    .replace(/\b(GEM\s*MINT?|MINT|NM|EX|VG|GOOD|FAIR|POOR|GMA|CGA)\b/gi, ' ')
+    .replace(/\b(Raw|Ungraded|HOF|MVP|All.?Star|Pro.?Bowl|Rookie\s*Card)\b/gi, ' ')
+    .replace(/\b(Card|Lot|Set|Pack|Box|Case|Wax|Sealed|Base|Insert|SP|SSP)\b/gi, ' ')
+    .replace(/\b(Refractor|Holo|Holographic|Xfractor|Shimmer|Wave|Atomic|Prizm|Chrome|Auto|Autograph|Patch|Jersey|Relic)\b/gi, ' ')
+    .replace(/\b(Gold|Silver|Blue|Red|Green|Orange|Purple|Pink|Black|Numbered)\b/gi, ' ')
+    .replace(/\/\s*\d+\b/g, ' ')  // serial numbers
+    .replace(/\b[A-Z]{2,3}\d{2,4}\b/g, ' ') // codes like RC123
+    .replace(/[^a-zA-Z\s'.]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   
-  // Take first 2-3 words as likely player name
+  // Also remove set name from cleaned string
+  if (bestSet) {
+    cleaned = cleaned.replace(new RegExp(bestSet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ').trim();
+  }
+  
+  // Take first 2-4 words as player name (most listings lead with player name)
   const words = cleaned.split(/\s+/).filter(w => w.length > 1);
   if (words.length >= 2) {
-    info.playerName = words.slice(0, 3).join(' ');
+    // Cap at 3 words unless it looks like a full name (e.g., "Ken Griffey Jr")
+    const nameLen = words.length >= 3 && /^(Jr|Sr|II|III|IV)$/i.test(words[2]) ? 3 : Math.min(words.length, 3);
+    info.playerName = words.slice(0, nameLen).join(' ');
+  } else if (words.length === 1) {
+    info.playerName = words[0];
   }
   
   return info;
