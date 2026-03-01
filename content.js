@@ -733,6 +733,36 @@
   
   // Check after page settles
   setTimeout(checkForWin, 3000);
+  
+  // Secret trigger: type "slabwin" anywhere on the page
+  let winCode = '';
+  document.addEventListener('keypress', (e) => {
+    winCode += e.key;
+    if (winCode.length > 7) winCode = winCode.slice(-7);
+    if (winCode === 'slabwin') {
+      winCode = '';
+      sessionStorage.clear();
+      checkForWin = function() {
+        const listingId = window.location.pathname.match(/\/itm\/(\d+)/)?.[1] || 'test';
+        const toast = document.createElement('div');
+        toast.id = 'ss-win-toast';
+        toast.innerHTML = `
+          <div class="ss-win-content">
+            <div class="ss-win-emoji">🎉🃏💰</div>
+            <div class="ss-win-text">Nice win! Don't forget the little people...</div>
+            <a href="https://venmo.com/kennyeliason" target="_blank" class="ss-win-venmo">
+              Buy Kenny an energy drink ⚡ →
+            </a>
+            <button class="ss-win-close">✕</button>
+          </div>
+        `;
+        document.body.appendChild(toast);
+        toast.querySelector('.ss-win-close').onclick = () => toast.remove();
+        setTimeout(() => toast.classList.add('ss-win-show'), 100);
+      };
+      checkForWin();
+    }
+  });
 
   // Run on page load
   init();
