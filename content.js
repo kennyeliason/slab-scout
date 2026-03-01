@@ -147,38 +147,53 @@
       }
     }
 
+    // Find the LOWEST grade that's still profitable (worst-case-still-wins)
+    // and find grades with 2x+ ROI (the real sweet spot)
+    const profitableGrades = Object.entries(profit)
+      .filter(([g, p]) => p.profit > 0)
+      .sort((a, b) => parseInt(a[0]) - parseInt(b[0])); // sort by grade ascending
+    
+    const lowestProfitable = profitableGrades[0]; // lowest grade that still profits
+    const doubleUpGrades = profitableGrades.filter(([g, p]) => p.roi >= 100); // 2x+
+    const lowestDoubleUp = doubleUpGrades.sort((a, b) => parseInt(a[0]) - parseInt(b[0]))[0];
+
     // Calculate max bid thresholds (for each grade: avg sold - grading fee = break-even price)
     const maxBids = {};
     for (const [grade, data] of Object.entries(profit)) {
       const breakeven = comps[grade].avg - (gradingFee || 150);
       if (breakeven > 0) maxBids[grade] = breakeven;
     }
-    const bestMaxBid = Object.entries(maxBids).sort((a, b) => b[1] - a[1])[0];
 
-    // Summary
-    if (bestGrade && bestProfit > 0) {
-      const maxBidNote = isAuction && bestMaxBid 
-        ? `<div class="ss-max-bid">💡 Pay up to <strong>$${Math.floor(bestMaxBid[1]).toLocaleString()}</strong> and still profit (PSA ${bestMaxBid[0]})</div>` 
-        : '';
+    // Summary — focus on "at this price, even at grade X you profit"
+    if (lowestDoubleUp) {
+      // Amazing deal — even at a low grade you 2x
+      const [grade, data] = lowestDoubleUp;
+      summaryEl.innerHTML = `
+        <div class="ss-best ss-best-fire">
+          <div class="ss-best-label">🔥 At ${isAuction ? 'this bid' : 'this price'}, even a PSA ${grade} doubles your money</div>
+          <div class="ss-best-profit">+$${data.profit.toLocaleString(undefined, {maximumFractionDigits: 0})} <span class="ss-roi-badge">${data.roi.toFixed(0)}% ROI</span></div>
+          ${profitableGrades.length > 1 ? `<div class="ss-best-sub">Profitable at ${profitableGrades.length} grade levels (PSA ${profitableGrades[0][0]}–${profitableGrades[profitableGrades.length-1][0]})</div>` : ''}
+        </div>
+      `;
+    } else if (lowestProfitable) {
+      const [grade, data] = lowestProfitable;
+      const roiNote = data.roi >= 50 ? 'Solid margins' : 'Thin margins';
       summaryEl.innerHTML = `
         <div class="ss-best">
-          <div class="ss-best-label">Best opportunity</div>
-          <div class="ss-best-grade">PSA ${bestGrade}</div>
-          <div class="ss-best-profit">+$${bestProfit.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-          <div class="ss-best-roi">${profit[bestGrade].roi.toFixed(1)}% ROI</div>
+          <div class="ss-best-label">At ${isAuction ? 'this bid' : 'this price'}, a PSA ${grade}+ is profitable</div>
+          <div class="ss-best-profit">+$${data.profit.toLocaleString(undefined, {maximumFractionDigits: 0})} at PSA ${grade} <span class="ss-roi-badge">${data.roi.toFixed(0)}% ROI</span></div>
+          <div class="ss-best-sub">${roiNote} · ${profitableGrades.length} profitable grade${profitableGrades.length > 1 ? 's' : ''}</div>
         </div>
-        ${maxBidNote}
       `;
     } else if (Object.keys(comps).length > 0) {
-      const maxBidNote = bestMaxBid 
-        ? `<div class="ss-max-bid">💡 Pay up to <strong>$${Math.floor(bestMaxBid[1]).toLocaleString()}</strong> to break even (PSA ${bestMaxBid[0]})</div>` 
-        : '';
+      // Nothing profitable at current price — show what price WOULD work
+      const bestMaxBid = Object.entries(maxBids).sort((a, b) => b[1] - a[1])[0];
       summaryEl.innerHTML = `
         <div class="ss-best ss-best-negative">
-          <div class="ss-best-label">No profitable grade at current ${isAuction ? 'bid' : 'price'}</div>
-          <div class="ss-best-profit">${isAuction ? 'Don\'t bid higher' : 'Consider negotiating lower'}</div>
+          <div class="ss-best-label">Not worth it at ${isAuction ? 'this bid' : 'this price'}</div>
+          <div class="ss-best-profit">No grade is profitable after grading fees</div>
+          ${bestMaxBid ? `<div class="ss-best-sub">Would need to ${isAuction ? 'win at' : 'buy for'} ≤$${Math.floor(bestMaxBid[1]).toLocaleString()} to profit (PSA ${bestMaxBid[0]})</div>` : ''}
         </div>
-        ${maxBidNote}
       `;
     } else {
       summaryEl.innerHTML = `

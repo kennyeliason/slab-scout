@@ -277,6 +277,36 @@
   font-size: 13px;
 }
 
+/* ROI badge */
+.ss-roi-badge {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+/* Fire state (2x+) */
+.ss-best-fire {
+  border-color: rgba(255, 100, 30, 0.5) !important;
+  background: rgba(255, 100, 30, 0.08) !important;
+}
+
+.ss-best-fire .ss-best-label {
+  color: #ff6a1e;
+}
+
+.ss-best-fire .ss-roi-badge {
+  background: rgba(255, 100, 30, 0.25);
+  color: #ff6a1e;
+}
+
+.ss-best-sub {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+}
+
 /* Max bid recommendation */
 .ss-max-bid {
   background: rgba(245, 166, 35, 0.1);
