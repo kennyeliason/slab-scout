@@ -559,7 +559,9 @@
     if (likelyProfit && likelyProfit.profit > 0) {
       const roiStr = likelyProfit.roi.toFixed(0);
       const is2x = likelyProfit.roi >= 100;
-      const worstNote = worstProfit && g.grade_low !== likelyGrade
+      // Only show worst case if it's actually worse (lower profit) than likely
+      const showWorst = worstProfit && g.grade_low !== likelyGrade && worstProfit.profit < likelyProfit.profit;
+      const worstNote = showWorst
         ? (worstProfit.profit > 0 
           ? `<div class="ss-best-sub">Even at PSA ${g.grade_low} (worst case): +$${worstProfit.profit.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>`
           : `<div class="ss-best-sub">⚠️ At PSA ${g.grade_low}: -$${Math.abs(worstProfit.profit).toLocaleString(undefined, {maximumFractionDigits: 0})} loss</div>`)
