@@ -310,7 +310,7 @@
 /* Price override */
 .ss-price-override {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
   margin-top: 8px;
   padding: 8px 10px;
@@ -318,14 +318,21 @@
   border-radius: 8px;
 }
 
+.ss-price-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .ss-price-override label {
   font-size: 12px;
   color: #aaa;
   white-space: nowrap;
+  min-width: 75px;
 }
 
-.ss-price-input {
-  width: 90px;
+.ss-price-input, .ss-roi-input {
+  width: 80px;
   padding: 5px 8px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -336,11 +343,21 @@
   outline: none;
 }
 
-.ss-price-input:focus {
+.ss-roi-input {
+  width: 55px;
+  text-align: center;
+}
+
+.ss-roi-pct {
+  color: #888;
+  font-size: 13px;
+}
+
+.ss-price-input:focus, .ss-roi-input:focus {
   border-color: #e94560;
 }
 
-.ss-recalc-btn {
+.ss-recalc-btn, .ss-roi-calc-btn {
   padding: 5px 12px;
   background: linear-gradient(135deg, #e94560, #c62a47);
   color: white;
@@ -352,8 +369,41 @@
   white-space: nowrap;
 }
 
-.ss-recalc-btn:hover {
+.ss-roi-calc-btn {
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+}
+
+.ss-recalc-btn:hover, .ss-roi-calc-btn:hover {
   opacity: 0.9;
+}
+
+/* ROI result */
+.ss-roi-result {
+  padding: 6px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+}
+
+.ss-roi-header {
+  font-size: 11px;
+  color: #a78bfa;
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ss-roi-row {
+  font-size: 12px;
+  color: #ddd;
+  padding: 2px 0;
+  display: flex;
+  gap: 8px;
+}
+
+.ss-roi-grade {
+  color: #888;
+  min-width: 45px;
 }
 
 /* Max bid recommendation */

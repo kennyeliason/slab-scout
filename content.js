@@ -65,9 +65,18 @@
           <div class="ss-parsed-title"></div>
           <div class="ss-raw-price"></div>
           <div class="ss-price-override">
-            <label>Your max bid: $</label>
-            <input type="text" class="ss-price-input" placeholder="Enter price">
-            <button class="ss-recalc-btn">Recalc</button>
+            <div class="ss-price-row">
+              <label>Your price: $</label>
+              <input type="text" class="ss-price-input" placeholder="Enter price">
+              <button class="ss-recalc-btn">Recalc</button>
+            </div>
+            <div class="ss-price-row">
+              <label>Target ROI:</label>
+              <input type="text" class="ss-roi-input" placeholder="100" value="100">
+              <span class="ss-roi-pct">%</span>
+              <button class="ss-roi-calc-btn">Max Bid?</button>
+            </div>
+            <div class="ss-roi-result" style="display:none;"></div>
           </div>
         </div>
         <div class="ss-loading" style="display:none;">
@@ -444,6 +453,44 @@
       // Also recalc on Enter key
       priceInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') recalcBtn.click();
+      });
+      
+      // Target ROI → Max Bid calculator
+      const roiInput = panel.querySelector('.ss-roi-input');
+      const roiCalcBtn = panel.querySelector('.ss-roi-calc-btn');
+      const roiResult = panel.querySelector('.ss-roi-result');
+      
+      roiCalcBtn.onclick = () => {
+        const targetROI = (parseFloat(roiInput.value) || 100) / 100;
+        const d = panel._ssData;
+        const taxRate = d.salesTaxRate || 0.08;
+        const ebayRate = d.ebayFeeRate || 0.15;
+        const fee = d.gradingFee || 150;
+        
+        // For each grade with comps, calculate max buy price for target ROI
+        // buy = (sale*(1-ebayFee) - fee*(1+targetROI)) / ((1+tax)*(1+targetROI))
+        let rows = '';
+        const grades = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+        for (const grade of grades) {
+          if (!d.comps[grade]) continue;
+          const avgSale = d.comps[grade].avg;
+          const maxBuy = (avgSale * (1 - ebayRate) - fee * (1 + targetROI)) / ((1 + taxRate) * (1 + targetROI));
+          if (maxBuy <= 0) {
+            rows += `<div class="ss-roi-row"><span class="ss-roi-grade">PSA ${grade}</span> <span style="color:#e94560;">Not achievable</span></div>`;
+          } else {
+            rows += `<div class="ss-roi-row"><span class="ss-roi-grade">PSA ${grade}</span> Pay up to <strong>$${Math.floor(maxBuy).toLocaleString()}</strong></div>`;
+          }
+        }
+        
+        roiResult.innerHTML = `
+          <div class="ss-roi-header">Max bid for ${Math.round(targetROI * 100)}% ROI:</div>
+          ${rows}
+        `;
+        roiResult.style.display = 'block';
+      };
+      
+      roiInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') roiCalcBtn.click();
       });
       
       renderResults(panel, parsed.cardInfo, listing.price, response.comps, response.profit, response.gradingFee, listing.isAuction, response.feeSource, response.salesTaxRate, response.ebayFeeRate);
