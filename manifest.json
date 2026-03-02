@@ -16,7 +16,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.ebay.com/itm/*"],
+      "matches": ["https://www.ebay.com/itm/*", "https://www.ebay.com/p/*"],
       "js": ["content.js"],
       "css": ["content.css"]
     }
